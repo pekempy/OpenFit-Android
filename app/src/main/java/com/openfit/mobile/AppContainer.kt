@@ -94,14 +94,11 @@ class AppContainer(context: Context) {
                 val localSettings = settingsRepository.settingsFlow.first()
                 val now = java.time.Instant.now().toString()
                 val envelope = SettingsEnvelope(updatedAt = now, settings = localSettings)
-                if (DriveSync.upload(token, envelope)) {
-                    lastSyncedAt = now
-                    settingsRepository.setDriveLastSyncedAt(now)
-                    settingsRepository.setDriveLastSyncRun(now)
-                    _syncStatus.value = "Settings backed up to Drive" to true
-                } else {
-                    _syncStatus.value = "Backup failed: couldn't reach Drive" to false
-                }
+                DriveSync.upload(token, envelope)
+                lastSyncedAt = now
+                settingsRepository.setDriveLastSyncedAt(now)
+                settingsRepository.setDriveLastSyncRun(now)
+                _syncStatus.value = "Settings backed up to Drive" to true
             }
         } catch (e: Exception) {
             _syncStatus.value = "Sync failed: ${e.message}" to false

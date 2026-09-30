@@ -58,41 +58,35 @@ object DriveSync {
         }
     }
 
-    /** Serialise and upload the envelope, creating the file on first call. */
-    suspend fun upload(token: String, envelope: SettingsEnvelope): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                val payload = json.encodeToString(envelope)
-                val id = findFile(token)
-                if (id != null) {
-                    send(
-                        "$UPLOAD/files/$id?uploadType=media",
-                        "PATCH", token, "application/json", payload,
-                    )
-                } else {
-                    // First upload: multipart so we can put it in appDataFolder.
-                    val boundary = "openfit-${System.nanoTime()}"
-                    val metadata =
-                        """{"name":"$BACKUP_FILENAME","parents":["appDataFolder"]}"""
-                    val multipart = buildString {
-                        append("--$boundary\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n")
-                        append(metadata).append("\r\n")
-                        append("--$boundary\r\nContent-Type: application/json\r\n\r\n")
-                        append(payload).append("\r\n")
-                        append("--$boundary--")
-                    }
-                    send(
-                        "$UPLOAD/files?uploadType=multipart",
-                        "POST", token,
-                        "multipart/related; boundary=$boundary", multipart,
-                    )
-                }
-                true
-            } catch (e: Exception) {
-                Log.w(TAG, "upload failed", e)
-                false
+    /** Serialise and upload the envelope, creating the file on first call.
+     *  Throws on any HTTP or network failure so the caller sees the real error. */
+    suspend fun upload(token: String, envelope: SettingsEnvelope) = withContext(Dispatchers.IO) {
+        val payload = json.encodeToString(envelope)
+        val id = findFile(token)
+        if (id != null) {
+            send(
+                "$UPLOAD/files/$id?uploadType=media",
+                "PATCH", token, "application/json", payload,
+            )
+        } else {
+            // First upload: multipart so we can put it in appDataFolder.
+            val boundary = "openfit-${System.nanoTime()}"
+            val metadata =
+                """{"name":"$BACKUP_FILENAME","parents":["appDataFolder"]}"""
+            val multipart = buildString {
+                append("--$boundary\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n")
+                append(metadata).append("\r\n")
+                append("--$boundary\r\nContent-Type: application/json\r\n\r\n")
+                append(payload).append("\r\n")
+                append("--$boundary--")
             }
+            send(
+                "$UPLOAD/files?uploadType=multipart",
+                "POST", token,
+                "multipart/related; boundary=$boundary", multipart,
+            )
         }
+    }
 
     /** The backup file's Drive id, or null if it doesn't exist yet. */
     private fun findFile(token: String): String? {
