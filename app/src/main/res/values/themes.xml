@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base theme: the UI itself is 100% Jetpack Compose (Material 3 +
+         dynamic color, see ui/theme/Theme.kt) - this XML theme only sets
+         the window-level chrome Compose can't reach from inside a
+         composable (status/nav bar, splash). -->
+    <style name="Theme.OpenFit" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+    </style>
+
+    <style name="Theme.OpenFit.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.OpenFit</item>
+    </style>
+</resources>
