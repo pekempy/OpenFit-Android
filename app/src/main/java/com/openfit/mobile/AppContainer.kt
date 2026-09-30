@@ -2,6 +2,7 @@ package com.openfit.mobile
 
 import android.content.Context
 import com.openfit.mobile.data.ai.SummaryService
+import com.openfit.mobile.data.backup.DriveBackupManager
 import com.openfit.mobile.data.exercise.ExerciseLabelStore
 import com.openfit.mobile.data.health.GoogleHealthDataSource
 import com.openfit.mobile.data.health.HealthApiClient
@@ -27,6 +28,7 @@ class AppContainer(context: Context) {
     val healthRepository = HealthRepository(HealthApiClient.create(), authManager)
     val googleHealthDataSource = GoogleHealthDataSource(healthRepository, authManager, settingsRepository)
     val healthConnectRepository = HealthConnectRepository(appContext, manualLogStore, settingsRepository)
+    val driveBackupManager = DriveBackupManager(appContext, settingsRepository)
     val summaryService = SummaryService()
     val notificationHelper = NotificationHelper(context)
 

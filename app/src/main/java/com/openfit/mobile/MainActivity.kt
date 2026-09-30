@@ -84,6 +84,12 @@ class MainActivity : ComponentActivity() {
         onHealthConnectResult?.invoke(granted)
     }
 
+    // Result of the Drive OAuth consent screen.
+    private var onDriveAuthResult: ((android.content.Intent?) -> Unit)? = null
+    private val driveAuthLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        onDriveAuthResult?.invoke(result.data)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -107,6 +113,10 @@ class MainActivity : ComponentActivity() {
                         onAuthResult = onResult
                         authLauncher.launch(intent)
                     },
+                    launchDriveAuthIntent = { intent, onResult ->
+                        onDriveAuthResult = onResult
+                        driveAuthLauncher.launch(intent)
+                    },
                     launchHealthConnectPermission = { onResult ->
                         onHealthConnectResult = onResult
                         healthConnectLauncher.launch(HealthConnectManager.READ_PERMISSIONS)
@@ -127,6 +137,7 @@ class MainActivity : ComponentActivity() {
 fun OpenFitApp(
     container: AppContainer,
     launchAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
+    launchDriveAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
     launchHealthConnectPermission: ((Set<String>) -> Unit) -> Unit,
 ) {
     val navController = rememberNavController()
@@ -265,6 +276,7 @@ fun OpenFitApp(
                         SettingsScreen(
                             container = container,
                             launchAuthIntent = launchAuthIntent,
+                            launchDriveAuthIntent = launchDriveAuthIntent,
                             launchHealthConnectPermission = launchHealthConnectPermission,
                             onDataSourceChanged = { healthViewModel.refresh() },
                             onSignedOut = {

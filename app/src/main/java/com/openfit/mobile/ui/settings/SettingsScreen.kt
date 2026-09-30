@@ -79,6 +79,7 @@ enum class SettingsCategory(
 fun SettingsScreen(
     container: AppContainer,
     launchAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
+    launchDriveAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
     launchHealthConnectPermission: ((Set<String>) -> Unit) -> Unit,
     onDataSourceChanged: () -> Unit,
     onSignedOut: () -> Unit,
@@ -128,6 +129,7 @@ fun SettingsScreen(
                         container = container,
                         settings = s,
                         launchAuthIntent = launchAuthIntent,
+                        launchDriveAuthIntent = launchDriveAuthIntent,
                         launchHealthConnectPermission = launchHealthConnectPermission,
                         onDataSourceChanged = onDataSourceChanged,
                         onSignedOut = onSignedOut,
@@ -588,6 +590,7 @@ private fun ConnectionsSettingsSection(
     container: AppContainer,
     settings: AppSettings,
     launchAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
+    launchDriveAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
     launchHealthConnectPermission: ((Set<String>) -> Unit) -> Unit,
     onDataSourceChanged: () -> Unit,
     onSignedOut: () -> Unit,
@@ -769,9 +772,10 @@ private fun ConnectionsSettingsSection(
 
     HorizontalDivider()
 
-    PersonalisationSettingsSection(
-        personalisation = settings.personalisation,
-        onSave = { updated -> scope.launch { container.settingsRepository.updatePersonalisation(updated) } },
+    DriveBackupSection(
+        container = container,
+        settings = settings,
+        launchDriveAuthIntent = launchDriveAuthIntent,
     )
 }
 
@@ -1066,6 +1070,180 @@ private fun AiProviderConfigForm(kind: AiProviderKind, config: AiProviderConfig,
     }
 }
 
+
+// ── Drive Backup ─────────────────────────────────────────────────────────────
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DriveBackupSection(
+    container: AppContainer,
+    settings: AppSettings,
+    launchDriveAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val driveSettings = settings.driveBackup
+    val isConnected = driveSettings.enabled && driveSettings.accountEmail.isNotBlank()
+    var status by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(false) }
+
+    SectionHeader("Google Drive Backup", Icons.Filled.Backup)
+    Text(
+        "Back up your goals, units, appearance, AI config, and all other settings to your Google Drive App Data folder. " +
+        "Not visible in Drive UI. Restore on any device signed into the same account.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // Status row
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (isConnected) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    contentDescription = null,
+                    tint = if (isConnected) Color(0xFF00C853) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text(
+                        if (isConnected) "Connected: ${driveSettings.accountEmail}" else "Not connected",
+                        style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                    )
+                    driveSettings.lastBackupTimeIso?.let { iso ->
+                        val formatted = runCatching {
+                            java.time.Instant.parse(iso)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .format(java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm"))
+                        }.getOrDefault(iso)
+                        Text("Last backup: $formatted", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+
+            if (isConnected) {
+                // Auto-backup toggle
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Auto-backup", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                        Text("Backs up whenever settings change.", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = driveSettings.autoBackup,
+                        onCheckedChange = { enabled ->
+                            scope.launch {
+                                container.settingsRepository.updateDriveBackupSettings(driveSettings.copy(autoBackup = enabled))
+                            }
+                        },
+                    )
+                }
+
+                // Backup / Restore buttons
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = {
+                            if (!isLoading) {
+                                isLoading = true
+                                scope.launch {
+                                    when (val r = container.driveBackupManager.backup()) {
+                                        is com.openfit.mobile.data.backup.BackupResult.Success ->
+                                            status = "Backed up successfully"
+                                        is com.openfit.mobile.data.backup.BackupResult.Failure ->
+                                            status = "Backup failed: ${r.reason}"
+                                    }
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading,
+                    ) {
+                        if (isLoading) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        else Text("Backup now")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            if (!isLoading) {
+                                isLoading = true
+                                scope.launch {
+                                    when (val r = container.driveBackupManager.restore()) {
+                                        is com.openfit.mobile.data.backup.RestoreResult.Success ->
+                                            status = "Restored successfully"
+                                        is com.openfit.mobile.data.backup.RestoreResult.Failure ->
+                                            status = "Restore failed: ${r.reason}"
+                                    }
+                                    isLoading = false
+                                }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading,
+                    ) { Text("Restore") }
+                }
+
+                status?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall,
+                        color = if (it.startsWith("Backed") || it.startsWith("Restored"))
+                            Color(0xFF00C853) else MaterialTheme.colorScheme.error)
+                }
+
+                OutlinedButton(
+                    onClick = { scope.launch { container.driveBackupManager.disconnect() } },
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Disconnect Drive") }
+
+            } else {
+                // OAuth setup
+                var showSetup by remember { mutableStateOf(false) }
+                var clientId by remember { mutableStateOf(driveSettings.clientId) }
+                var clientSecret by remember { mutableStateOf(driveSettings.clientSecret) }
+
+                TextButton(onClick = { showSetup = !showSetup }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (showSetup) "Hide setup" else "Configure OAuth client")
+                }
+                if (showSetup) {
+                    OutlinedTextField(value = clientId, onValueChange = { clientId = it },
+                        label = { Text("OAuth Client ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = clientSecret, onValueChange = { clientSecret = it },
+                        label = { Text("Client Secret (optional)") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth())
+                    Text(
+                        "Requires a Google Cloud project with Drive API enabled. " +
+                        "You can reuse the same client ID as the Health API if Drive API is enabled on it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val updated = driveSettings.copy(clientId = clientId.trim(), clientSecret = clientSecret.trim())
+                                container.settingsRepository.updateDriveBackupSettings(updated)
+                                runCatching {
+                                    val intent = container.driveBackupManager.createAuthIntent(updated)
+                                    launchDriveAuthIntent(intent) { resultIntent ->
+                                        if (resultIntent != null) {
+                                            scope.launch {
+                                                runCatching {
+                                                    container.driveBackupManager.handleAuthResult(resultIntent, updated)
+                                                }.onFailure { status = "Auth failed: ${it.message}" }
+                                            }
+                                        }
+                                    }
+                                }.onFailure { status = "Could not start auth: ${it.message}" }
+                            }
+                        },
+                        enabled = clientId.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Connect Google Drive") }
+                }
+                status?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
 /** Manages any number of named, self-hosted/custom AI endpoint profiles
  * (e.g. several Odysseus instances, or any other OpenAI-compatible
  * self-hosted assistant) - add, edit, delete, pick the active one, and test
