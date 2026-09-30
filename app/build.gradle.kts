@@ -4,6 +4,26 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Derive version from the nearest git tag (e.g. v0.1.0 → "0.1.0", code 100).
+// Falls back to "dev" / 0 for untagged local builds.
+val gitTag: String = try {
+    providers.exec { commandLine("git", "describe", "--tags", "--exact-match") }
+        .standardOutput.asText.get().trim().removePrefix("v")
+} catch (_: Exception) {
+    try {
+        providers.exec { commandLine("git", "describe", "--tags") }
+            .standardOutput.asText.get().trim().removePrefix("v")
+    } catch (_: Exception) { "dev" }
+}
+
+val gitVersionCode: Int = try {
+    val parts = gitTag.split("-")[0].split(".")
+    val major = parts.getOrNull(0)?.toIntOrNull() ?: 0
+    val minor = parts.getOrNull(1)?.toIntOrNull() ?: 0
+    val patch = parts.getOrNull(2)?.toIntOrNull() ?: 0
+    (major * 10_000) + (minor * 100) + patch
+} catch (_: Exception) { 0 }
+
 android {
     namespace = "com.openfit.mobile"
     compileSdk = 36
@@ -12,8 +32,8 @@ android {
         applicationId = "com.openfit.mobile"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = gitVersionCode
+        versionName = gitTag
 
         // Redirect URI for the OAuth loopback-free Android flow (AppAuth +
         // custom scheme). Must match what's registered on the Android-type

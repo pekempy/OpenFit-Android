@@ -602,9 +602,21 @@ class HealthConnectRepository(
                 Device.TYPE_HEAD_MOUNTED -> "Head-mounted"
                 else -> if (isManualEntry) "Manual Entry" else "Health Connect Source"
             }
-            // Absorb any phantom signals for this package.
-            val allSignals = (signals + (phantomSignalsByPackage[key.packageName] ?: emptySet()))
-                .toList()
+            // Absorb any phantom signals for this package, then strip signals
+            // that are physically implausible for the device type — a watch
+            // can't weigh you; a scale can't count steps or record sleep.
+            val rawSignals = (signals + (phantomSignalsByPackage[key.packageName] ?: emptySet()))
+            val implausible: Set<String> = when (key.type) {
+                Device.TYPE_WATCH, Device.TYPE_FITNESS_BAND, Device.TYPE_RING,
+                Device.TYPE_CHEST_STRAP ->
+                    setOf("Weight", "Body Fat", "Height", "Body Water Mass", "BMR")
+                Device.TYPE_SCALE ->
+                    setOf("Steps", "Distance", "Floors", "Sleep", "Workouts",
+                        "Heart Rate", "Resting HR", "HRV", "SpO2", "Breathing",
+                        "Skin Temp", "VO2 Max", "Elevation Gained")
+                else -> emptySet()
+            }
+            val allSignals = rawSignals.filter { it !in implausible }.toList()
             val rawId = listOf(key.type.toString(), key.manufacturer, key.model, key.packageName)
                 .joinToString("_")
             val lastSync = deviceLastSync[key]
