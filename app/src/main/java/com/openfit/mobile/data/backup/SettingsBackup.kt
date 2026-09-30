@@ -1,36 +1,27 @@
 package com.openfit.mobile.data.backup
 
-import com.openfit.mobile.data.oauth.OAuthConfig
-import com.openfit.mobile.data.settings.AppDisplaySettings
-import com.openfit.mobile.data.settings.AppReminderSettings
-import com.openfit.mobile.data.settings.AppUnitSettings
-import com.openfit.mobile.data.settings.AiPersonalisationSettings
-import com.openfit.mobile.data.settings.HealthDataSourceKind
-import com.openfit.mobile.data.settings.UserHealthGoals
-import com.openfit.mobile.model.AiProviderConfig
-import com.openfit.mobile.model.AiProviderKind
-import com.openfit.mobile.model.CustomEndpointProfile
-import kotlinx.serialization.Serializable
+import com.openfit.mobile.data.settings.AppSettings
+import com.openfit.mobile.data.settings.SettingsRepository
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
-/** Point-in-time snapshot of every user-configurable setting, written
- * to the Drive App Data folder as a JSON file.
- *
- * Drive OAuth tokens, Health Connect session state, and local DataStore
- * keys are intentionally excluded — those are device-specific and must
- * not roam across devices or accounts. */
-@Serializable
-data class SettingsBackup(
-    val schemaVersion: Int = 1,
-    val backedUpAt: String = "",
-    val goals: UserHealthGoals = UserHealthGoals(),
-    val units: AppUnitSettings = AppUnitSettings(),
-    val display: AppDisplaySettings = AppDisplaySettings(),
-    val reminders: AppReminderSettings = AppReminderSettings(),
-    val personalisation: AiPersonalisationSettings = AiPersonalisationSettings(),
-    val selectedAiProvider: AiProviderKind? = null,
-    val aiProviders: Map<AiProviderKind, AiProviderConfig> = emptyMap(),
-    val customEndpoints: List<CustomEndpointProfile> = emptyList(),
-    val selectedCustomEndpointId: String? = null,
-    val dataSourceKind: HealthDataSourceKind = HealthDataSourceKind.HEALTH_CONNECT,
-    val oauthConfig: OAuthConfig = OAuthConfig(),
-)
+/** Serialises and deserialises all user-configurable settings to/from a
+ * JSON string.  The caller decides where to write or read the string —
+ * typically via the Android Storage Access Framework file picker so the
+ * user can save to Google Drive, Downloads, or anywhere else without any
+ * OAuth setup on our part. */
+object SettingsBackup {
+
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true; prettyPrint = true }
+
+    suspend fun export(repository: SettingsRepository): String {
+        val settings = repository.settingsFlow.firstOrNull() ?: AppSettings()
+        return json.encodeToString(settings)
+    }
+
+    suspend fun import(jsonStr: String, repository: SettingsRepository): Result<Unit> = runCatching {
+        val restored = json.decodeFromString<AppSettings>(jsonStr)
+        repository.applyFullSettings(restored)
+    }
+}

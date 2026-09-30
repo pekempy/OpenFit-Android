@@ -101,19 +101,6 @@ data class AiPersonalisationSettings(
     val userDisplayName: String = "",
     val personaInstructions: String = "",
 )
-@Serializable
-data class DriveBackupSettings(
-    /** Whether the user has connected a Google account for Drive backup. */
-    val enabled: Boolean = false,
-    val autoBackup: Boolean = false,
-    /** Display-only — the account email shown in the UI. */
-    val accountEmail: String = "",
-    /** Client ID for the Drive OAuth flow. May be left blank to reuse
-     * the Health API client ID stored in oauthConfig. */
-    val clientId: String = "",
-    val clientSecret: String = "",
-    val lastBackupTimeIso: String? = null,
-)
 
 @Serializable
 data class AppSettings(
@@ -132,7 +119,6 @@ data class AppSettings(
     val units: AppUnitSettings = AppUnitSettings(),
     val reminders: AppReminderSettings = AppReminderSettings(),
     val goals: UserHealthGoals = UserHealthGoals(),
-    val driveBackup: DriveBackupSettings = DriveBackupSettings(),
 ) {
     val activeCustomEndpoint: CustomEndpointProfile?
         get() = customEndpoints.find { it.id == selectedCustomEndpointId } ?: customEndpoints.firstOrNull()

@@ -7,7 +7,6 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.openfit.mobile.data.oauth.OAuthConfig
-import com.openfit.mobile.data.backup.SettingsBackup
 import com.openfit.mobile.model.AiProviderConfig
 import com.openfit.mobile.model.AiProviderKind
 import kotlinx.coroutines.flow.Flow
@@ -75,7 +74,6 @@ class SettingsRepository(private val context: Context) {
             units = prefs[KEY_UNITS]?.let { runCatching { json.decodeFromString<AppUnitSettings>(it) }.getOrNull() } ?: AppUnitSettings(),
             reminders = resolvedReminders,
             goals = prefs[KEY_GOALS]?.let { runCatching { json.decodeFromString<UserHealthGoals>(it) }.getOrNull() } ?: UserHealthGoals(),
-            driveBackup = prefs[KEY_DRIVE_BACKUP]?.let { runCatching { json.decodeFromString<DriveBackupSettings>(it) }.getOrNull() } ?: DriveBackupSettings(),
         )
     }
 
@@ -183,25 +181,21 @@ class SettingsRepository(private val context: Context) {
             prefs[KEY_REMINDERS] = json.encodeToString(currentReminders.copy(eveningActivitySummary = schedule))
         }
     }
-    suspend fun updateDriveBackupSettings(settings: DriveBackupSettings) {
-        context.settingsDataStore.edit { it[KEY_DRIVE_BACKUP] = json.encodeToString(settings) }
-    }
 
-    /** Apply a restored [SettingsBackup] — delegates to existing update
-     * methods so all validation and side-effects are preserved. */
-    suspend fun applyBackup(backup: SettingsBackup) {
-        updateGoals(backup.goals)
-        updateUnits(backup.units)
-        updateDisplaySettings(backup.display)
-        updateReminders(backup.reminders)
-        updatePersonalisation(backup.personalisation)
-        setSelectedAiProvider(backup.selectedAiProvider)
+    /** Restore a full [AppSettings] snapshot in one shot — used by backup import. */
+    suspend fun applyFullSettings(s: AppSettings) {
+        updateGoals(s.goals)
+        updateUnits(s.units)
+        updateDisplaySettings(s.display)
+        updateReminders(s.reminders)
+        updatePersonalisation(s.personalisation)
+        setSelectedAiProvider(s.selectedAiProvider)
         context.settingsDataStore.edit { prefs ->
-            prefs[KEY_AI_PROVIDERS] = json.encodeToString(backup.aiProviders)
-            prefs[KEY_CUSTOM_ENDPOINTS] = json.encodeToString(backup.customEndpoints)
-            backup.selectedCustomEndpointId?.let { prefs[KEY_SELECTED_CUSTOM_ENDPOINT] = it }
-            prefs[KEY_DATA_SOURCE] = backup.dataSourceKind.name
-            prefs[KEY_OAUTH] = json.encodeToString(backup.oauthConfig)
+            prefs[KEY_AI_PROVIDERS] = json.encodeToString(s.aiProviders)
+            prefs[KEY_CUSTOM_ENDPOINTS] = json.encodeToString(s.customEndpoints)
+            s.selectedCustomEndpointId?.let { prefs[KEY_SELECTED_CUSTOM_ENDPOINT] = it }
+            prefs[KEY_DATA_SOURCE] = s.dataSourceKind.name
+            prefs[KEY_OAUTH] = json.encodeToString(s.oauthConfig)
         }
     }
 
@@ -219,6 +213,5 @@ class SettingsRepository(private val context: Context) {
         val KEY_UNITS = stringPreferencesKey("unit_settings")
         val KEY_REMINDERS = stringPreferencesKey("reminder_settings")
         val KEY_GOALS = stringPreferencesKey("health_goals")
-        val KEY_DRIVE_BACKUP = stringPreferencesKey("drive_backup_settings")
     }
 }
