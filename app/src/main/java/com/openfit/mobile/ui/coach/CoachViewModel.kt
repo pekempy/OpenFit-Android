@@ -28,8 +28,13 @@ data class CoachUiState(
 class CoachViewModel(
     private val settingsRepository: SettingsRepository,
     private val healthBundle: HealthSnapshotBundle?,
+    lastSummary: String? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(CoachUiState())
+    private val _uiState = MutableStateFlow(
+        // Pre-populate with today's AI briefing so it's visible even when the
+        // notification was missed or permission isn't granted.
+        CoachUiState(messages = if (lastSummary != null) listOf(ChatMessage(ChatRole.ASSISTANT, lastSummary)) else emptyList()),
+    )
     val uiState: StateFlow<CoachUiState> = _uiState.asStateFlow()
 
     fun send(text: String) {

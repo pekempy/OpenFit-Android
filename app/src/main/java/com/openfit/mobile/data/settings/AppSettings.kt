@@ -119,6 +119,10 @@ data class AppSettings(
     val units: AppUnitSettings = AppUnitSettings(),
     val reminders: AppReminderSettings = AppReminderSettings(),
     val goals: UserHealthGoals = UserHealthGoals(),
+    /** Last AI-generated summary texts — persisted so the Coach tab can
+     * surface them even when the notification permission isn't granted. */
+    val lastMorningSummary: String? = null,
+    val lastEveningSummary: String? = null,
 ) {
     val activeCustomEndpoint: CustomEndpointProfile?
         get() = customEndpoints.find { it.id == selectedCustomEndpointId } ?: customEndpoints.firstOrNull()

@@ -1686,6 +1686,13 @@ private fun OAuthEditor(config: OAuthConfig, onSave: (OAuthConfig) -> Unit) {
 // ============================================================================
 @Composable
 private fun AboutSettingsSection() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val versionName = remember {
+        try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "dev"
+        } catch (_: Exception) { "dev" }
+    }
+
     SectionHeader("OpenFit Android", Icons.Filled.Info)
     Text(
         "Open-source health & fitness platform integrating Google Health Connect, Google Health OAuth API, and intelligent local/remote AI coaching.",
@@ -1695,7 +1702,7 @@ private fun AboutSettingsSection() {
 
     Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            InfoRow("Version", "1.0.0 (API 36)")
+            InfoRow("Version", versionName)
             HorizontalDivider()
             InfoRow("Architecture", "Jetpack Compose + Material 3")
             HorizontalDivider()

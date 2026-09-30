@@ -74,6 +74,8 @@ class SettingsRepository(private val context: Context) {
             units = prefs[KEY_UNITS]?.let { runCatching { json.decodeFromString<AppUnitSettings>(it) }.getOrNull() } ?: AppUnitSettings(),
             reminders = resolvedReminders,
             goals = prefs[KEY_GOALS]?.let { runCatching { json.decodeFromString<UserHealthGoals>(it) }.getOrNull() } ?: UserHealthGoals(),
+            lastMorningSummary = prefs[KEY_LAST_MORNING_SUMMARY],
+            lastEveningSummary = prefs[KEY_LAST_EVENING_SUMMARY],
         )
     }
 
@@ -181,6 +183,14 @@ class SettingsRepository(private val context: Context) {
             prefs[KEY_REMINDERS] = json.encodeToString(currentReminders.copy(eveningActivitySummary = schedule))
         }
     }
+    suspend fun saveLastMorningSummary(text: String) {
+        context.settingsDataStore.edit { it[KEY_LAST_MORNING_SUMMARY] = text }
+    }
+
+    suspend fun saveLastEveningSummary(text: String) {
+        context.settingsDataStore.edit { it[KEY_LAST_EVENING_SUMMARY] = text }
+    }
+
 
     /** Restore a full [AppSettings] snapshot in one shot — used by backup import. */
     suspend fun applyFullSettings(s: AppSettings) {
@@ -246,5 +256,7 @@ class SettingsRepository(private val context: Context) {
         val KEY_DRIVE_ACCOUNT = stringPreferencesKey("drive_account")
         val KEY_DRIVE_LAST_SYNCED_AT = stringPreferencesKey("drive_last_synced_at")
         val KEY_DRIVE_LAST_SYNC_RUN = stringPreferencesKey("drive_last_sync_run")
+        val KEY_LAST_MORNING_SUMMARY = stringPreferencesKey("last_morning_summary")
+        val KEY_LAST_EVENING_SUMMARY = stringPreferencesKey("last_evening_summary")
     }
 }

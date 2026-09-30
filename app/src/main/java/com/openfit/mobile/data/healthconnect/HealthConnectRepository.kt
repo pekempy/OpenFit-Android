@@ -408,7 +408,10 @@ class HealthConnectRepository(
             val zoneMin = if (daySteps != null && daySteps > 0) (dayExerciseMin + (daySteps / 250)).coerceAtLeast(0) else null
 
             val manualExerciseCal = manualExerciseSessions.filter { it.date == key }.sumOf { it.caloriesBurned ?: 0.0 }
-            val baseCal = totalCalByDate[key] ?: activeCalByDate[key]
+            // Prefer active (movement-only) calories; fall back to total only when
+            // no active cal record exists. Total includes BMR (~1700 kcal) which
+            // makes the displayed figure misleadingly high at low step counts.
+            val baseCal = activeCalByDate[key] ?: totalCalByDate[key]
             val dayCalories = if (baseCal != null || manualExerciseCal > 0) (baseCal ?: 0.0) + manualExerciseCal else null
 
             val dayWater = (hydrationByDate[key] ?: 0.0) + (manualWaterByDate[key] ?: 0.0)

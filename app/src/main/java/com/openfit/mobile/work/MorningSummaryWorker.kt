@@ -16,4 +16,6 @@ class MorningSummaryWorker(context: Context, params: WorkerParameters) : BaseSum
     override fun notificationTitle() = "Good morning \u2600\ufe0f"
     override fun notify(container: AppContainer, title: String, body: String) =
         container.notificationHelper.showMorningSummary(title, body)
+    override suspend fun saveSummary(container: AppContainer, text: String) =
+        container.settingsRepository.saveLastMorningSummary(text)
 }

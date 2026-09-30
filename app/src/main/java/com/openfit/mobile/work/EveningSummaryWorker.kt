@@ -16,4 +16,6 @@ class EveningSummaryWorker(context: Context, params: WorkerParameters) : BaseSum
     override fun notificationTitle() = "Today's activity recap"
     override fun notify(container: AppContainer, title: String, body: String) =
         container.notificationHelper.showEveningSummary(title, body)
+    override suspend fun saveSummary(container: AppContainer, text: String) =
+        container.settingsRepository.saveLastEveningSummary(text)
 }

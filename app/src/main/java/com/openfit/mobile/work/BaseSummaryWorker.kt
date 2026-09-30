@@ -31,8 +31,14 @@ abstract class BaseSummaryWorker(context: Context, params: WorkerParameters) : C
             val settings = container.settingsRepository.settingsFlow.first()
             val schedule = scheduleFor(settings)
             if (schedule.enabled) {
-                val bundle = container.healthRepository.sync(settings.oauthConfig, LocalDate.now().toString())
+                // Use whichever data source the user configured (Health Connect
+                // or Google Health API) — not the raw cloud HealthRepository.
+                val dataSource = container.activeHealthDataSource(settings.dataSourceKind)
+                val bundle = dataSource.sync(LocalDate.now().toString())
                 val summaryText = buildSummary(container.summaryService, bundle, settings)
+                // Persist so the Coach tab can surface it even when the
+                // notification permission isn't granted or the notification is missed.
+                saveSummary(container, summaryText)
                 notify(container, notificationTitle(), summaryText)
             }
             Result.success()
@@ -48,5 +54,8 @@ abstract class BaseSummaryWorker(context: Context, params: WorkerParameters) : C
             }
         }
     }
+
+    /** Persist the generated summary text so it can be surfaced in-app. */
+    protected abstract suspend fun saveSummary(container: com.openfit.mobile.AppContainer, text: String)
 }
 

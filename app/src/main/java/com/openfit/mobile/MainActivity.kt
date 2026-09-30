@@ -1,5 +1,8 @@
 package com.openfit.mobile
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -84,11 +87,22 @@ class MainActivity : ComponentActivity() {
         onHealthConnectResult?.invoke(granted)
     }
 
+    // Android 13+ requires an explicit runtime grant for POST_NOTIFICATIONS.
+    // We request it once on first launch; declining is fine — summaries still
+    // run and are saved in the Coach tab, just without a system notification.
+    private val notificationPermLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op: best-effort */ }
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
         setContent {
             val display by container.settingsRepository.settingsFlow.collectAsState(initial = null)
             val displaySettings = display?.display ?: com.openfit.mobile.data.settings.AppDisplaySettings()

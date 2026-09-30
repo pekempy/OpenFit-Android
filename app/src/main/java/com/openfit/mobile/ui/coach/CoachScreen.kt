@@ -23,8 +23,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun CoachScreen(container: AppContainer, healthState: TodayUiState) {
     val bundle = (healthState as? TodayUiState.Success)?.bundle
+    val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
+    // Prefer the evening summary (activity recap); fall back to this morning's
+    // sleep summary if no evening summary has been generated yet today.
+    val lastSummary = settings?.lastEveningSummary ?: settings?.lastMorningSummary
     val viewModel: CoachViewModel = viewModel(
-        factory = SimpleViewModelFactory { CoachViewModel(container.settingsRepository, bundle) },
+        factory = SimpleViewModelFactory { CoachViewModel(container.settingsRepository, bundle, lastSummary) },
     )
     val state by viewModel.uiState.collectAsState()
     var input by remember { mutableStateOf("") }
