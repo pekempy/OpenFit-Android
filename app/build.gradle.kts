@@ -22,10 +22,21 @@ android {
         manifestPlaceholders["appAuthRedirectScheme"] = "com.openfit.mobile"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = System.getenv("KEYSTORE_PATH")?.let { file(it) }
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("KEY_ALIAS")
+            keyPassword = System.getenv("KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            val hasSigning = System.getenv("KEYSTORE_PATH") != null
+            signingConfig = if (hasSigning) signingConfigs.getByName("release") else null
         }
     }
 
