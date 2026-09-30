@@ -16,6 +16,7 @@ securityCrypto = "1.1.0"
 splashscreen = "1.2.0"
 kotlinxCoroutines = "1.10.2"
 healthConnect = "1.1.0"
+playServicesAuth = "21.3.0"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -43,6 +44,7 @@ appauth = { group = "net.openid", name = "appauth", version.ref = "appauth" }
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "splashscreen" }
 health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

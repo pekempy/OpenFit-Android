@@ -29,6 +29,8 @@ import com.openfit.mobile.data.settings.*
 import com.openfit.mobile.model.AiProviderConfig
 import com.openfit.mobile.model.AiProviderKind
 import com.openfit.mobile.work.WorkScheduler
+import androidx.activity.result.IntentSenderRequest
+import com.openfit.mobile.data.backup.DriveAuth
 import kotlinx.coroutines.launch
 
 enum class SettingsCategory(
@@ -1068,21 +1070,178 @@ private fun AiProviderConfigForm(kind: AiProviderKind, config: AiProviderConfig,
 private fun BackupRestoreSection(container: AppContainer) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-    var busy by remember { mutableStateOf(false) }
+
+    // ── Google Drive ───────────────────────────────────────────────────────
+    val driveAccount by container.driveAccount.collectAsState()
+    val syncing by container.syncing.collectAsState()
+    val syncStatus by container.syncStatus.collectAsState()
+    val lastSyncRun by container.driveLastSyncRun.collectAsState()
+    var authMessage by remember { mutableStateOf<String?>(null) }
+
+    val consentLauncher = rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        container.driveAuth.onConsentResult(result.data)
+            .onSuccess { token ->
+                container.syncWithDrive(token)
+                container.rememberDriveConnection()
+            }
+            .onFailure { e ->
+                authMessage = e.message ?: "Google sign-in failed"
+            }
+    }
+
+    fun connectDrive() {
+        authMessage = null
+        scope.launch {
+            when (val step = container.driveAuth.begin()) {
+                is DriveAuth.Step.Token -> {
+                    container.syncWithDrive(step.value)
+                    container.rememberDriveConnection()
+                }
+                is DriveAuth.Step.NeedsConsent -> {
+                    consentLauncher.launch(
+                        IntentSenderRequest.Builder(step.intentSender).build()
+                    )
+                }
+                is DriveAuth.Step.Failed -> authMessage = step.message
+            }
+        }
+    }
+
+    SectionHeader("Backup & Restore", Icons.Filled.Backup)
+
+    // Drive card
+    Text(
+        "Back up all settings to your Google Drive (private app folder). " +
+            "Restores automatically on first launch after a reinstall or on a new device.",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
+    Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (driveAccount != null) {
+                // Connected
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFF00C853),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Connected: $driveAccount",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        lastSyncRun?.let { raw ->
+                            val formatted = runCatching {
+                                val instant = java.time.Instant.parse(raw)
+                                val local = java.time.LocalDateTime.ofInstant(
+                                    instant, java.time.ZoneId.systemDefault()
+                                )
+                                java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                                    .format(local)
+                            }.getOrElse { raw.take(16).replace('T', ' ') }
+                            Text(
+                                "Last sync: $formatted",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = { container.driveAuth.token?.let { container.syncWithDrive(it) } },
+                        enabled = !syncing,
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        if (syncing) {
+                            CircularProgressIndicator(
+                                Modifier.size(16.dp), strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text("Syncing…")
+                        } else {
+                            Icon(Icons.Filled.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Sync Now")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { container.forgetDriveConnection() },
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Sign Out") }
+                }
+
+                syncStatus?.let { (msg, ok) ->
+                    Text(
+                        msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (ok) Color(0xFF00C853) else MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                // Not connected
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Not connected",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+
+                Button(
+                    onClick = { connectDrive() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Filled.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Sign in with Google Drive")
+                }
+
+                authMessage?.let { msg ->
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+    // ── Manual file export / import ────────────────────────────────────────
+    var fileStatus by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    var fileBusy by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            busy = true
-            status = runCatching {
+            fileBusy = true
+            fileStatus = runCatching {
                 val json = com.openfit.mobile.data.backup.SettingsBackup.export(container.settingsRepository)
                 context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray()) }
                 "Settings exported successfully" to true
             }.getOrElse { "Export failed: ${it.message}" to false }
-            busy = false
+            fileBusy = false
         }
     }
 
@@ -1091,8 +1250,8 @@ private fun BackupRestoreSection(container: AppContainer) {
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
-            busy = true
-            status = runCatching {
+            fileBusy = true
+            fileStatus = runCatching {
                 val json = context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
                     ?: error("Could not read file")
                 com.openfit.mobile.data.backup.SettingsBackup
@@ -1100,14 +1259,12 @@ private fun BackupRestoreSection(container: AppContainer) {
                     .getOrThrow()
                 "Settings restored successfully" to true
             }.getOrElse { "Import failed: ${it.message}" to false }
-            busy = false
+            fileBusy = false
         }
     }
 
-    SectionHeader("Backup & Restore", Icons.Filled.Backup)
     Text(
-        "Export all settings to a JSON file. Save it to Google Drive, local storage, " +
-        "or anywhere. Import on any device — no accounts or API keys required.",
+        "Manual export/import — save a JSON file anywhere, share between devices without any account.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -1117,7 +1274,7 @@ private fun BackupRestoreSection(container: AppContainer) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = { exportLauncher.launch("openfit-settings-backup.json") },
-                    enabled = !busy, modifier = Modifier.weight(1f),
+                    enabled = !fileBusy, modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Filled.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
@@ -1125,16 +1282,19 @@ private fun BackupRestoreSection(container: AppContainer) {
                 }
                 OutlinedButton(
                     onClick = { importLauncher.launch(arrayOf("application/json")) },
-                    enabled = !busy, modifier = Modifier.weight(1f),
+                    enabled = !fileBusy, modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Filled.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Import")
                 }
             }
-            status?.let { (msg, ok) ->
-                Text(msg, style = MaterialTheme.typography.bodySmall,
-                    color = if (ok) Color(0xFF00C853) else MaterialTheme.colorScheme.error)
+            fileStatus?.let { (msg, ok) ->
+                Text(
+                    msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (ok) Color(0xFF00C853) else MaterialTheme.colorScheme.error,
+                )
             }
         }
     }

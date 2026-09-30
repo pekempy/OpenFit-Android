@@ -113,4 +113,5 @@ dependencies {
     implementation(libs.appauth)
     implementation(libs.security.crypto)
     implementation(libs.health.connect.client)
+    implementation(libs.play.services.auth)
 }

@@ -143,6 +143,8 @@ fun OpenFitApp(
         isConnected = container.activeHealthDataSource(currentSettings.dataSourceKind).isConnected()
     }
 
+    LaunchedEffect(Unit) { container.resumeDrive() }
+
     val connected = isConnected
     if (connected == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

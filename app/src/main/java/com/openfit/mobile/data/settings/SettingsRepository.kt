@@ -199,6 +199,36 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    // ── Google Drive backup state ─────────────────────────────────────────
+
+    val driveAccountFlow: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_DRIVE_ACCOUNT] }
+
+    val driveLastSyncedAtFlow: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_DRIVE_LAST_SYNCED_AT] }
+
+    val driveLastSyncRunFlow: Flow<String?> =
+        context.settingsDataStore.data.map { it[KEY_DRIVE_LAST_SYNC_RUN] }
+
+    suspend fun setDriveAccount(email: String?) {
+        context.settingsDataStore.edit { prefs ->
+            if (email == null) prefs.remove(KEY_DRIVE_ACCOUNT)
+            else prefs[KEY_DRIVE_ACCOUNT] = email
+        }
+    }
+
+    suspend fun setDriveLastSyncedAt(at: String?) {
+        context.settingsDataStore.edit { prefs ->
+            if (at == null) prefs.remove(KEY_DRIVE_LAST_SYNCED_AT)
+            else prefs[KEY_DRIVE_LAST_SYNCED_AT] = at
+        }
+    }
+
+    suspend fun setDriveLastSyncRun(at: String) {
+        context.settingsDataStore.edit { it[KEY_DRIVE_LAST_SYNC_RUN] = at }
+    }
+
+
     private companion object {
         val KEY_OAUTH = stringPreferencesKey("oauth_config")
         val KEY_AI_PROVIDERS = stringPreferencesKey("ai_providers")
@@ -213,5 +243,8 @@ class SettingsRepository(private val context: Context) {
         val KEY_UNITS = stringPreferencesKey("unit_settings")
         val KEY_REMINDERS = stringPreferencesKey("reminder_settings")
         val KEY_GOALS = stringPreferencesKey("health_goals")
+        val KEY_DRIVE_ACCOUNT = stringPreferencesKey("drive_account")
+        val KEY_DRIVE_LAST_SYNCED_AT = stringPreferencesKey("drive_last_synced_at")
+        val KEY_DRIVE_LAST_SYNC_RUN = stringPreferencesKey("drive_last_sync_run")
     }
 }
