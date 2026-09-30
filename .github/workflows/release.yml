@@ -23,40 +23,14 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build release APK
-        run: ./gradlew assembleRelease
-        env:
-          ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-
-      - name: Sign APK
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        uses: r0adkll/sign-android-release@v1
-        id: sign
-        with:
-          releaseDirectory: app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.KEYSTORE_BASE64 }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: "36.0.0"
-
-      - name: Locate APK
-        id: apk
-        run: |
-          SIGNED="${{ steps.sign.outputs.signedReleaseFile }}"
-          if [ -n "$SIGNED" ] && [ -f "$SIGNED" ]; then
-            echo "path=$SIGNED" >> "$GITHUB_OUTPUT"
-          else
-            UNSIGNED=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
-            echo "path=$UNSIGNED" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Build APK
+        run: ./gradlew assembleDebug
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: ${{ steps.apk.outputs.path }}
+          files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
