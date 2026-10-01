@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -43,45 +44,50 @@ fun MetricsScreen(
         pageCount = { tabs.size },
     )
     val scope = rememberCoroutineScope()
-
-    // Keep tab indicator in sync when user swipes
     val currentPage = pagerState.currentPage
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Metrics") }) },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            PrimaryTabRow(
-                selectedTabIndex = currentPage,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary,
-            ) {
-                tabs.forEachIndexed { index, tab ->
-                    val isSelected = currentPage == index
-                    Tab(
-                        selected = isSelected,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                        text = {
-                            Text(
-                                tab.title,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        },
-                        icon = { Icon(tab.icon, contentDescription = tab.title, modifier = Modifier.size(20.dp)) },
-                    )
+        val isRefreshing = (state as? TodayUiState.Success)?.isRefreshing ?: false
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                PrimaryTabRow(
+                    selectedTabIndex = currentPage,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.primary,
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        val isSelected = currentPage == index
+                        Tab(
+                            selected = isSelected,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            text = {
+                                Text(
+                                    tab.title,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            },
+                            icon = { Icon(tab.icon, contentDescription = tab.title, modifier = Modifier.size(20.dp)) },
+                        )
+                    }
                 }
-            }
 
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                beyondViewportPageCount = 1,
-            ) { page ->
-                when (tabs[page]) {
-                    MetricSubTab.ACTIVITY -> ActivityScreen(container, state, onRefresh)
-                    MetricSubTab.SLEEP    -> SleepScreen(container, state, onRefresh)
-                    MetricSubTab.VITALS   -> HealthScreen(container, state, onRefresh)
-                    MetricSubTab.BODY     -> BodyScreen(container, state, onRefresh)
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1,
+                ) { page ->
+                    when (tabs[page]) {
+                        MetricSubTab.ACTIVITY -> ActivityScreen(container, state, onRefresh)
+                        MetricSubTab.SLEEP    -> SleepScreen(container, state, onRefresh)
+                        MetricSubTab.VITALS   -> HealthScreen(container, state, onRefresh)
+                        MetricSubTab.BODY     -> BodyScreen(container, state, onRefresh)
+                    }
                 }
             }
         }

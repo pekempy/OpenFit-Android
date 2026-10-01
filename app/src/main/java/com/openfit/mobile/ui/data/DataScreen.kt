@@ -52,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,53 +95,50 @@ fun DataScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
         }
     }
     Scaffold(topBar = { TopAppBar(title = { Text("Data & Devices") }) }) { padding ->
-        when (state) {
-            is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize().padding(padding))
-            is TodayUiState.NotConnected -> EmptyStateMessage(
-                "Connect Google Health in Settings to see your paired devices and sync coverage.",
-                Modifier.fillMaxSize().padding(padding),
-            )
-            is TodayUiState.Error -> EmptyStateMessage(state.message, Modifier.fillMaxSize().padding(padding))
-            is TodayUiState.Success -> {
-                val bundle = state.bundle
-                val devices = bundle.devices.ifEmpty {
-                    // Fallback to active Health Connect provider
-                    listOf(
-                        PairedDevice(
-                            id = "health_connect_default",
-                            deviceType = "Google Health Connect",
-                            deviceVersion = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
-                            batteryLevelPercent = null,
-                            lastSyncTimeIso = Instant.now().toString(),
-                        )
-                    )
-                }
-
-                val availableMetrics = countAvailableMetrics(bundle)
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize().padding(padding),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    item {
-                        Text(
-                            text = "Connected Devices & Sources",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+        val isRefreshing = (state as? TodayUiState.Success)?.isRefreshing ?: false
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
+            when (state) {
+                is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize())
+                is TodayUiState.NotConnected -> EmptyStateMessage(
+                    "Connect Google Health in Settings to see your paired devices and sync coverage.",
+                    Modifier.fillMaxSize(),
+                )
+                is TodayUiState.Error -> EmptyStateMessage(state.message, Modifier.fillMaxSize())
+                is TodayUiState.Success -> {
+                    val bundle = state.bundle
+                    val devices = bundle.devices.ifEmpty {
+                        listOf(
+                            PairedDevice(
+                                id = "health_connect_default",
+                                deviceType = "Google Health Connect",
+                                deviceVersion = "${android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${android.os.Build.MODEL}",
+                                batteryLevelPercent = null,
+                                lastSyncTimeIso = Instant.now().toString(),
+                            )
                         )
                     }
-
-                    items(devices, key = { it.id }) { device ->
-                        DeviceCard(device = device, availableMetrics = availableMetrics)
-                    }
-
-                    item {
-                        PrivacyCard()
-                    }
-
-                    item {
-                        DataCoverageCard(bundle = bundle)
+                    val availableMetrics = countAvailableMetrics(bundle)
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        item {
+                            Text(
+                                text = "Connected Devices & Sources",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        items(devices, key = { it.id }) { device ->
+                            DeviceCard(device = device, availableMetrics = availableMetrics)
+                        }
+                        item { PrivacyCard() }
+                        item { DataCoverageCard(bundle = bundle) }
                     }
                 }
             }

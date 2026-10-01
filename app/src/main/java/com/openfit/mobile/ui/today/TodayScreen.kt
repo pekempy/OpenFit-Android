@@ -11,7 +11,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -44,7 +46,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun TodayScreen(
     container: AppContainer,
@@ -52,30 +54,32 @@ fun TodayScreen(
     onRefresh: () -> Unit,
     onConnectRequested: () -> Unit,
 ) {
-
-    Scaffold(
-        topBar = {
-            TopAppBar(title = { Text("Today") })
-        },
-    ) { padding ->
-        when (val s = state) {
-            is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize().padding(padding))
-            is TodayUiState.NotConnected -> Column(
-                modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-            ) {
-                EmptyStateMessage("Connect your Google Health account in Settings to see your data here.")
-                Button(onClick = onConnectRequested, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                    Text("Connect Google Health")
+    val isRefreshing = (state as? TodayUiState.Success)?.isRefreshing ?: false
+    Scaffold(topBar = { TopAppBar(title = { Text("Today") }) }) { padding ->
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.fillMaxSize().padding(padding),
+        ) {
+            when (val s = state) {
+                is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize())
+                is TodayUiState.NotConnected -> Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    EmptyStateMessage("Connect your Google Health account in Settings to see your data here.")
+                    Button(onClick = onConnectRequested, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                        Text("Connect Google Health")
+                    }
                 }
-            }
-            is TodayUiState.Error -> Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-                EmptyStateMessage(s.message)
-                Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-                    Text("Retry")
+                is TodayUiState.Error -> Column(modifier = Modifier.fillMaxSize()) {
+                    EmptyStateMessage(s.message)
+                    Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                        Text("Retry")
+                    }
                 }
+                is TodayUiState.Success -> TodayContent(container, PaddingValues(0.dp), s)
             }
-            is TodayUiState.Success -> TodayContent(container, padding, s)
         }
     }
 }
