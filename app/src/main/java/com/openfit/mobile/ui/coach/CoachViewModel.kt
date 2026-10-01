@@ -28,14 +28,25 @@ data class CoachUiState(
 class CoachViewModel(
     private val settingsRepository: SettingsRepository,
     private val healthBundle: HealthSnapshotBundle?,
-    lastSummary: String? = null,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(
-        // Pre-populate with today's AI briefing so it's visible even when the
-        // notification was missed or permission isn't granted.
-        CoachUiState(messages = if (lastSummary != null) listOf(ChatMessage(ChatRole.ASSISTANT, lastSummary)) else emptyList()),
-    )
+    private val _uiState = MutableStateFlow(CoachUiState())
     val uiState: StateFlow<CoachUiState> = _uiState.asStateFlow()
+
+    init {
+        // Load the last AI-generated summary (morning or evening) so it shows
+        // immediately when the user opens Coach from the notification tap,
+        // without needing settings to be passed in from the composable.
+        viewModelScope.launch {
+            val settings = settingsRepository.settingsFlow.first()
+            val lastSummary = settings.lastEveningSummary ?: settings.lastMorningSummary
+            if (lastSummary != null && _uiState.value.messages.isEmpty()) {
+                _uiState.value = _uiState.value.copy(
+                    messages = listOf(ChatMessage(ChatRole.ASSISTANT, lastSummary)),
+                )
+            }
+        }
+    }
+
 
     fun send(text: String) {
         val trimmed = text.trim()

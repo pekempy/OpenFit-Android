@@ -106,6 +106,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val display by container.settingsRepository.settingsFlow.collectAsState(initial = null)
             val displaySettings = display?.display ?: com.openfit.mobile.data.settings.AppDisplaySettings()
+            // Capture the intent at composition time so the deep-link only
+            // fires once even if the Activity re-enters the composition.
+            val navigateTo = remember { intent.getStringExtra(com.openfit.mobile.notifications.NotificationHelper.EXTRA_NAVIGATE_TO) }
             OpenFitTheme(
                 darkTheme = when (displaySettings.themeMode) {
                     com.openfit.mobile.data.settings.AppThemeMode.SYSTEM -> androidx.compose.foundation.isSystemInDarkTheme()
@@ -118,6 +121,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 OpenFitApp(
                     container = container,
+                    navigateTo = navigateTo,
                     launchAuthIntent = { intent, onResult ->
                         onAuthResult = onResult
                         authLauncher.launch(intent)
@@ -141,6 +145,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun OpenFitApp(
     container: AppContainer,
+    navigateTo: String? = null,
     launchAuthIntent: (android.content.Intent, (android.content.Intent?) -> Unit) -> Unit,
     launchHealthConnectPermission: ((Set<String>) -> Unit) -> Unit,
 ) {
@@ -158,6 +163,18 @@ fun OpenFitApp(
     }
 
     LaunchedEffect(Unit) { container.resumeDrive() }
+
+    // Deep-link from a summary notification: navigate to the Coach tab once
+    // the connection check completes and the nav graph is ready.
+    LaunchedEffect(navigateTo, isConnected) {
+        if (navigateTo == com.openfit.mobile.notifications.NotificationHelper.NAVIGATE_TO_COACH && isConnected == true) {
+            navController.navigate(Destination.Coach.route) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+    }
 
     val connected = isConnected
     if (connected == null) {

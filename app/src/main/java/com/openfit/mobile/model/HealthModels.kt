@@ -113,6 +113,7 @@ data class ReproductiveHealthEvent(
 /** Everything the UI needs for one selected date: the day itself plus a
  * trailing 14-day trend window, used for the sparkline-style "personal
  * trends" cards and for the AI daily-summary prompts. */
+@Serializable
 data class HealthSnapshotBundle(
     val selectedDate: String,
     val today: DailySnapshot,

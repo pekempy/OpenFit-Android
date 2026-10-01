@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.openfit.mobile.OpenFitApplication
 import com.openfit.mobile.data.settings.SummarySchedule
+import com.openfit.mobile.data.health.BundleCache
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 
@@ -35,6 +36,8 @@ abstract class BaseSummaryWorker(context: Context, params: WorkerParameters) : C
                 // or Google Health API) — not the raw cloud HealthRepository.
                 val dataSource = container.activeHealthDataSource(settings.dataSourceKind)
                 val bundle = dataSource.sync(LocalDate.now().toString())
+                // Cache so the app shows data immediately when opened from the notification.
+                BundleCache.save(applicationContext, bundle)
                 val summaryText = buildSummary(container.summaryService, bundle, settings)
                 // Persist so the Coach tab can surface it even when the
                 // notification permission isn't granted or the notification is missed.

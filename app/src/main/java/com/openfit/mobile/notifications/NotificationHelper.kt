@@ -34,6 +34,7 @@ class NotificationHelper(private val context: Context) {
     private fun show(id: Int, channel: String, title: String, body: String) {
         val openIntent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_NAVIGATE_TO, NAVIGATE_TO_COACH)
         }
         val pendingIntent = android.app.PendingIntent.getActivity(
             context, id, openIntent,
@@ -58,10 +59,12 @@ class NotificationHelper(private val context: Context) {
         NotificationManagerCompat.from(context).notify(id, notification)
     }
 
-    private companion object {
-        const val CHANNEL_MORNING = "morning_sleep_summary"
-        const val CHANNEL_EVENING = "evening_activity_summary"
-        const val NOTIFICATION_ID_MORNING = 1001
-        const val NOTIFICATION_ID_EVENING = 1002
+    companion object {
+        const val EXTRA_NAVIGATE_TO = "navigate_to"
+        const val NAVIGATE_TO_COACH = "coach"
+        private const val CHANNEL_MORNING = "morning_sleep_summary"
+        private const val CHANNEL_EVENING = "evening_activity_summary"
+        private const val NOTIFICATION_ID_MORNING = 1001
+        private const val NOTIFICATION_ID_EVENING = 1002
     }
 }
