@@ -65,12 +65,15 @@ class SummaryService {
         val hours = sleep.totalMinutes / 60
         val minutes = sleep.totalMinutes % 60
         val stages = sleep.stages.joinToString(", ") { "${it.stage}: ${it.minutes}m" }
-        val recentAvgMinutes = bundle.trend.mapNotNull { it.sleep?.totalMinutes }.takeIf { it.isNotEmpty() }?.average()?.toInt()
+        val recentAvgMinutes = bundle.trend.mapNotNull { it.totalSleepMinutes }.takeIf { it.isNotEmpty() }?.average()?.toInt()
         val insights = InsightsEngine.generate(bundle, settings.goals)
         return buildString {
             appendLine("Here's last night's sleep data for ${bundle.selectedDate}:")
             appendLine("- Total sleep: ${hours}h ${minutes}m")
             sleep.efficiencyPercent?.let { appendLine("- Sleep efficiency: $it%") }
+            if (bundle.today.naps.isNotEmpty()) {
+                appendLine("- Naps today: ${bundle.today.naps.size} nap(s) totalling ${bundle.today.naps.sumOf { it.totalMinutes } / 60}h ${bundle.today.naps.sumOf { it.totalMinutes } % 60}m")
+            }
             if (stages.isNotBlank()) appendLine("- Stages: $stages")
             bundle.today.restingHeartRateBpm?.let { appendLine("- Resting heart rate: $it bpm") }
             bundle.today.hrvMillis?.let { appendLine("- HRV: ${it.toInt()} ms") }

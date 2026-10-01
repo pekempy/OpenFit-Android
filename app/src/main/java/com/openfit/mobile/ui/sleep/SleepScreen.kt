@@ -38,6 +38,10 @@ import com.openfit.mobile.ui.common.LoadingBlock
 import com.openfit.mobile.ui.common.MetricCard
 import com.openfit.mobile.ui.common.getMetricExplanation
 import com.openfit.mobile.ui.today.TodayUiState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,18 +57,60 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                 val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
                 val goals = settings?.goals ?: com.openfit.mobile.data.settings.UserHealthGoals()
                 val sleep = state.bundle.today.sleep
+                val naps = state.bundle.today.naps
+                val totalSleepMinutes = state.bundle.today.totalSleepMinutes
                 Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
-                    if (sleep == null) {
-                        EmptyStateMessage("No sleep recorded for last night.")
-                    } else {
+                    // Total sleep header card
+                    if (totalSleepMinutes != null) {
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Text(
+                                    text = formatDuration(totalSleepMinutes),
+                                    style = MaterialTheme.typography.headlineLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ChartColors.Sleep,
+                                )
+                                // Show sub-labels if both overnight and naps exist
+                                if (sleep != null && naps.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceEvenly,
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text(
+                                                text = "Overnight: ${formatDuration(sleep.totalMinutes)}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            val napsTotalMinutes = naps.sumOf { it.totalMinutes }
+                                            Text(
+                                                text = "Naps: ${formatDuration(napsTotalMinutes)}",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Overnight sleep section
+                    if (sleep != null) {
                         Text("Last night's sleep", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         SleepSummary(sleep, goals)
 
-                        Text("Stages", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        StageBreakdown(sleep)
+                        if (sleep.stages.isNotEmpty()) {
+                            Text("Stages", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            StageBreakdown(sleep)
+                        }
 
                         if (sleep.segments.isNotEmpty()) {
                             Text("Night timeline", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -76,7 +122,52 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                         }
                     }
 
-                    val trendSleep = state.bundle.trend.filter { it.sleep != null }
+                    // Naps section
+                    if (naps.isNotEmpty()) {
+                        Text("Naps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        naps.forEach { nap ->
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    // Nap start time
+                                    val startTime = try {
+                                        val instant = Instant.parse(nap.startTimeIso)
+                                        val formatter = DateTimeFormatter.ofPattern("HH:mm", Locale.getDefault()).withZone(ZoneId.systemDefault())
+                                        formatter.format(instant)
+                                    } catch (e: Exception) {
+                                        "N/A"
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = startTime,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                        Text(
+                                            text = formatDuration(nap.totalMinutes),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                    }
+
+                                    // Nap stage breakdown
+                                    if (nap.stages.isNotEmpty()) {
+                                        StageBreakdown(nap)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // No sleep empty state
+                    if (sleep == null && naps.isEmpty()) {
+                        EmptyStateMessage("No sleep recorded.")
+                    }
+
+                    // Trend chart
+                    val trendSleep = state.bundle.trend.filter { it.totalSleepMinutes != null }
                     if (trendSleep.size > 1) {
                         Text("Sleep duration (14 days)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Card(modifier = Modifier.fillMaxWidth()) {
@@ -86,7 +177,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                                 val sleepTargetRemMins = goals.sleepMinutesGoal % 60
                                 val goalStr = "${sleepTargetHours}h${if (sleepTargetRemMins > 0) " ${sleepTargetRemMins}m" else ""}"
                                 DesktopColumnChart(
-                                    values = state.bundle.trend.map { it.sleep?.totalMinutes?.toDouble() },
+                                    values = state.bundle.trend.map { it.totalSleepMinutes?.toDouble() },
                                     dates = state.bundle.trend.map { it.date },
                                     color = ChartColors.Sleep,
                                     target = sleepTargetMinutes,

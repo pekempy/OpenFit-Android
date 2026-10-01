@@ -438,7 +438,8 @@ class HealthConnectRepository(
                 weightKg = dayWeight,
                 bodyFatPercent = dayFat,
                 waterLiters = dayWater.takeIf { it > 0.0 },
-                sleep = sleepByDate[key],
+                sleep = sleepByDate[key]?.firstOrNull { !it.isNap },
+                naps = sleepByDate[key]?.filter { it.isNap } ?: emptyList(),
                 heightMeters = heightByDate[key],
                 bodyWaterMassKg = bodyWaterMassByDate[key],
                 basalMetabolicRateKcal = basalMetabolicRateByDate[key],
@@ -703,60 +704,60 @@ class HealthConnectRepository(
         return buckets.toList()
     }
 
-    private fun parseSleepSessions(records: List<SleepSessionRecord>, zone: ZoneId): Map<String, SleepSession> {
-        // Group by the calendar date the session *ended* on, then select one
-        // representative session per date. When both an overnight sleep and an
-        // afternoon nap end on the same day, the overnight sleep always has the
-        // earlier start time (it started the previous evening), so minByOrNull
-        // on start epoch reliably picks it over any same-day nap.
-        val byDate = records.groupBy { it.endTime.atZone(zone).toLocalDate().toString() }
-        return byDate.mapValues { (date, sessions) ->
-            val session = sessions.minByOrNull { it.startTime.epochSecond }!!
-            val startHour = session.startTime.atZone(zone).hour
-            // 10:00–20:59 local = daytime nap; anything earlier/later = overnight sleep.
-            val isNap = startHour in 10..20
-
-            val stageMinutes = LinkedHashMap<String, Int>()
-            var asleepMinutes = 0
-            for (stage in session.stages) {
-                val minutes = Duration.between(stage.startTime, stage.endTime).toMinutes().toInt()
-                val key = when (stage.stage) {
-                    SleepSessionRecord.STAGE_TYPE_DEEP -> "deep"
-                    SleepSessionRecord.STAGE_TYPE_REM -> "rem"
-                    SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> "light"
-                    SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "wake"
-                    else -> null
-                } ?: continue
-                stageMinutes[key] = (stageMinutes[key] ?: 0) + minutes
-                if (key != "wake") asleepMinutes += minutes
+    /** Converts all raw sleep records into [SleepSession] objects, grouped by
+     * the calendar date each session ended on. All sessions for a date are
+     * returned sorted by start time so callers can distinguish overnight sleep
+     * (earliest-starting, isNap=false) from naps (isNap=true). */
+    private fun parseSleepSessions(records: List<SleepSessionRecord>, zone: ZoneId): Map<String, List<SleepSession>> {
+        return records
+            .groupBy { it.endTime.atZone(zone).toLocalDate().toString() }
+            .mapValues { (date, sessions) ->
+                sessions.sortedBy { it.startTime.epochSecond }.map { session ->
+                    val startHour = session.startTime.atZone(zone).hour
+                    val isNap = startHour in 10..20
+                    val stageMinutes = LinkedHashMap<String, Int>()
+                    var asleepMinutes = 0
+                    for (stage in session.stages) {
+                        val minutes = Duration.between(stage.startTime, stage.endTime).toMinutes().toInt()
+                        val key = when (stage.stage) {
+                            SleepSessionRecord.STAGE_TYPE_DEEP -> "deep"
+                            SleepSessionRecord.STAGE_TYPE_REM -> "rem"
+                            SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> "light"
+                            SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "wake"
+                            else -> null
+                        } ?: continue
+                        stageMinutes[key] = (stageMinutes[key] ?: 0) + minutes
+                        if (key != "wake") asleepMinutes += minutes
+                    }
+                    val segments = session.stages.mapNotNull { stage ->
+                        val key = when (stage.stage) {
+                            SleepSessionRecord.STAGE_TYPE_DEEP -> "deep"
+                            SleepSessionRecord.STAGE_TYPE_REM -> "rem"
+                            SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> "light"
+                            SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "wake"
+                            else -> null
+                        } ?: return@mapNotNull null
+                        SleepStageSegment(
+                            stage = key,
+                            startTimeIso = stage.startTime.toString(),
+                            endTimeIso = stage.endTime.toString(),
+                        )
+                    }
+                    val totalMinutes = if (asleepMinutes > 0) asleepMinutes
+                        else Duration.between(session.startTime, session.endTime).toMinutes().toInt()
+                    val inBedMinutes = Duration.between(session.startTime, session.endTime).toMinutes().toInt()
+                    SleepSession(
+                        date = date,
+                        startTimeIso = session.startTime.toString(),
+                        endTimeIso = session.endTime.toString(),
+                        totalMinutes = totalMinutes,
+                        efficiencyPercent = if (inBedMinutes > 0) (totalMinutes * 100 / inBedMinutes) else null,
+                        stages = stageMinutes.map { (stage, minutes) -> SleepStageMinutes(stage, minutes) },
+                        segments = segments,
+                        isNap = isNap,
+                    )
+                }
             }
-            val segments = session.stages.mapNotNull { stage ->
-                val key = when (stage.stage) {
-                    SleepSessionRecord.STAGE_TYPE_DEEP -> "deep"
-                    SleepSessionRecord.STAGE_TYPE_REM -> "rem"
-                    SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> "light"
-                    SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "wake"
-                    else -> null
-                } ?: return@mapNotNull null
-                SleepStageSegment(
-                    stage = key,
-                    startTimeIso = stage.startTime.toString(),
-                    endTimeIso = stage.endTime.toString(),
-                )
-            }
-            val totalMinutes = if (asleepMinutes > 0) asleepMinutes else Duration.between(session.startTime, session.endTime).toMinutes().toInt()
-            val inBedMinutes = Duration.between(session.startTime, session.endTime).toMinutes().toInt()
-            SleepSession(
-                date = date,
-                startTimeIso = session.startTime.toString(),
-                endTimeIso = session.endTime.toString(),
-                totalMinutes = totalMinutes,
-                efficiencyPercent = if (inBedMinutes > 0) (totalMinutes * 100 / inBedMinutes) else null,
-                stages = stageMinutes.map { (stage, minutes) -> SleepStageMinutes(stage, minutes) },
-                segments = segments,
-                isNap = isNap,
-            )
-        }
     }
 
     suspend fun writeWater(liters: Double, time: Instant = Instant.now()): Boolean = runCatching {

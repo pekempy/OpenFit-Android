@@ -30,6 +30,9 @@ data class DailySnapshot(
     /** 24 entries, hour-indexed (0-23), for the "steps per hour" bar chart. */
     val stepsHourly: List<Int> = emptyList(),
     val sleep: SleepSession? = null,
+    /** Daytime nap sessions for this date (isNap == true). Kept separate from
+     * the overnight [sleep] so the UI can display them distinctly. */
+    val naps: List<SleepSession> = emptyList(),
     // Body composition
     val heightMeters: Double? = null,
     val bodyWaterMassKg: Double? = null,
@@ -44,7 +47,13 @@ data class DailySnapshot(
      * "Zone 3 (Moderate)"). Empty unless the user has set a max heart rate
      * in Settings > Goals. */
     val heartRateZoneMinutes: Map<String, Int> = emptyMap(),
-)
+) {
+    /** Overnight sleep + all naps combined, or null when no sleep was recorded. */
+    val totalSleepMinutes: Int?
+        get() = if (sleep != null || naps.isNotEmpty())
+            (sleep?.totalMinutes ?: 0) + naps.sumOf { it.totalMinutes }
+        else null
+}
 
 @Serializable
 data class SleepStageMinutes(

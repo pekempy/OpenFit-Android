@@ -53,36 +53,39 @@ object HealthTranslator {
         val vo2Max = dailyRecordMap(raw["cardioRaw"], "dailyVo2Max") { it.num("vo2Max") }
 
         val sleepRecords = raw["sleepRaw"].dataPoints().mapNotNull(::parseSleepPoint)
-        // When multiple sessions share a date (overnight sleep + nap), prefer the
-        // one that started earliest — same logic as the Health Connect path.
+        // Keep ALL sessions per date sorted by start time; callers split overnight vs naps.
         val sleepByDate = sleepRecords
             .groupBy { it.date }
-            .mapValues { (_, sessions) -> sessions.minByOrNull { it.startTimeIso ?: "" }!! }
+            .mapValues { (_, sessions) -> sessions.sortedBy { it.startTimeIso ?: "" } }
 
         val exercises = raw["activitiesRaw"].dataPoints().mapNotNull(::parseExercisePoint)
 
-        fun snapshotFor(date: String) = DailySnapshot(
-            date = date,
-            steps = steps[date]?.toInt(),
-            calories = calories[date],
-            distanceMeters = distanceMm[date]?.div(1000.0),
-            floors = floors[date]?.toInt(),
-            activeMinutes = activeMinutesByLevel[date]?.let { levels ->
-                ((levels["MODERATE"] ?: 0.0) + (levels["VIGOROUS"] ?: 0.0)).toInt()
-            },
-            zoneMinutes = zoneMinutes[date]?.toInt(),
-            sedentarySeconds = sedentarySeconds[date]?.toInt(),
-            restingHeartRateBpm = restingHeart[date]?.toInt(),
-            hrvMillis = hrv[date],
-            spo2Percent = spo2[date],
-            breathingRatePerMin = breathing[date],
-            skinTemperatureDeltaC = skinTemp[date],
-            vo2Max = vo2Max[date],
-            weightKg = weightKg[date],
-            bodyFatPercent = bodyFat[date],
-            waterLiters = waterMl[date]?.div(1000.0),
-            sleep = sleepByDate[date],
-        )
+        fun snapshotFor(date: String): DailySnapshot {
+            val allSleep = sleepByDate[date] ?: emptyList()
+            return DailySnapshot(
+                date = date,
+                steps = steps[date]?.toInt(),
+                calories = calories[date],
+                distanceMeters = distanceMm[date]?.div(1000.0),
+                floors = floors[date]?.toInt(),
+                activeMinutes = activeMinutesByLevel[date]?.let { levels ->
+                    ((levels["MODERATE"] ?: 0.0) + (levels["VIGOROUS"] ?: 0.0)).toInt()
+                },
+                zoneMinutes = zoneMinutes[date]?.toInt(),
+                sedentarySeconds = sedentarySeconds[date]?.toInt(),
+                restingHeartRateBpm = restingHeart[date]?.toInt(),
+                hrvMillis = hrv[date],
+                spo2Percent = spo2[date],
+                breathingRatePerMin = breathing[date],
+                skinTemperatureDeltaC = skinTemp[date],
+                vo2Max = vo2Max[date],
+                weightKg = weightKg[date],
+                bodyFatPercent = bodyFat[date],
+                waterLiters = waterMl[date]?.div(1000.0),
+                sleep = allSleep.firstOrNull { !it.isNap },
+                naps = allSleep.filter { it.isNap },
+            )
+        }
 
         val stepsHourly = parseHourlySteps(raw["stepsIntradayRaw"])
 

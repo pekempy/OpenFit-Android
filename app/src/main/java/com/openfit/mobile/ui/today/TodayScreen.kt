@@ -250,13 +250,21 @@ private fun TodayContent(container: AppContainer, padding: PaddingValues, state:
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.Bottom) {
                             Column {
-                                Text(formatDuration(sleep.totalMinutes),
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Bold)
-                                val sleepGoalMin = goals.sleepMinutesGoal
-                                Text("goal ${formatDuration(sleepGoalMin)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                today.totalSleepMinutes?.let { total ->
+                                    Text(formatDuration(total),
+                                        style = MaterialTheme.typography.headlineMedium,
+                                        fontWeight = FontWeight.Bold)
+                                }
+                                if (today.naps.isNotEmpty()) {
+                                    Text("incl. ${today.naps.size} nap${if (today.naps.size==1) "" else "s"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                } else {
+                                    val sleepGoalMin = goals.sleepMinutesGoal
+                                    Text("goal ${formatDuration(sleepGoalMin)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                             sleep.efficiencyPercent?.let { eff ->
                                 Column(horizontalAlignment = Alignment.End) {

@@ -112,7 +112,16 @@ class CoachViewModel(
             appendLine("Today (${bundle.selectedDate}):")
             val today = bundle.today
             today.steps?.let { appendLine("- Steps: $it") }
-            today.sleep?.let { appendLine("- Sleep: ${it.totalMinutes / 60}h ${it.totalMinutes % 60}m, efficiency ${it.efficiencyPercent ?: "—"}%") }
+            today.totalSleepMinutes?.let { total ->
+                val overnight = today.sleep?.totalMinutes
+                val napCount = today.naps.size
+                val napMin = today.naps.sumOf { it.totalMinutes }
+                val parts = buildList {
+                    if (overnight != null) add("overnight: ${overnight/60}h ${overnight%60}m")
+                    if (napCount > 0) add("$napCount nap(s): ${napMin/60}h ${napMin%60}m")
+                }
+                appendLine("- Total sleep: ${total/60}h ${total%60}m${if (parts.isNotEmpty()) " (${parts.joinToString(", ")})" else ""}, efficiency ${today.sleep?.efficiencyPercent ?: "—"}%")
+            }
             today.restingHeartRateBpm?.let { appendLine("- Resting heart rate: $it bpm") }
             today.activeMinutes?.let { appendLine("- Active minutes: $it") }
             today.calories?.let { appendLine("- Calories: ${it.toInt()}") }
@@ -123,7 +132,7 @@ class CoachViewModel(
 
             val trend = bundle.trend
             val avgSteps = trend.mapNotNull { it.steps }.takeIf { it.isNotEmpty() }?.average()
-            val avgSleepMin = trend.mapNotNull { it.sleep?.totalMinutes }.takeIf { it.isNotEmpty() }?.average()
+            val avgSleepMin = trend.mapNotNull { it.totalSleepMinutes }.takeIf { it.isNotEmpty() }?.average()
             val avgRhr = trend.mapNotNull { it.restingHeartRateBpm }.takeIf { it.isNotEmpty() }?.average()
             if (avgSteps != null || avgSleepMin != null || avgRhr != null) {
                 appendLine()
