@@ -704,8 +704,18 @@ class HealthConnectRepository(
     }
 
     private fun parseSleepSessions(records: List<SleepSessionRecord>, zone: ZoneId): Map<String, SleepSession> {
-        return records.associate { session ->
-            val date = session.endTime.atZone(zone).toLocalDate().toString()
+        // Group by the calendar date the session *ended* on, then select one
+        // representative session per date. When both an overnight sleep and an
+        // afternoon nap end on the same day, the overnight sleep always has the
+        // earlier start time (it started the previous evening), so minByOrNull
+        // on start epoch reliably picks it over any same-day nap.
+        val byDate = records.groupBy { it.endTime.atZone(zone).toLocalDate().toString() }
+        return byDate.mapValues { (date, sessions) ->
+            val session = sessions.minByOrNull { it.startTime.epochSecond }!!
+            val startHour = session.startTime.atZone(zone).hour
+            // 10:00–20:59 local = daytime nap; anything earlier/later = overnight sleep.
+            val isNap = startHour in 10..20
+
             val stageMinutes = LinkedHashMap<String, Int>()
             var asleepMinutes = 0
             for (stage in session.stages) {
@@ -736,7 +746,7 @@ class HealthConnectRepository(
             }
             val totalMinutes = if (asleepMinutes > 0) asleepMinutes else Duration.between(session.startTime, session.endTime).toMinutes().toInt()
             val inBedMinutes = Duration.between(session.startTime, session.endTime).toMinutes().toInt()
-            date to SleepSession(
+            SleepSession(
                 date = date,
                 startTimeIso = session.startTime.toString(),
                 endTimeIso = session.endTime.toString(),
@@ -744,6 +754,7 @@ class HealthConnectRepository(
                 efficiencyPercent = if (inBedMinutes > 0) (totalMinutes * 100 / inBedMinutes) else null,
                 stages = stageMinutes.map { (stage, minutes) -> SleepStageMinutes(stage, minutes) },
                 segments = segments,
+                isNap = isNap,
             )
         }
     }

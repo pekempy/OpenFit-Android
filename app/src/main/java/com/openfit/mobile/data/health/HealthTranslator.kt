@@ -53,7 +53,11 @@ object HealthTranslator {
         val vo2Max = dailyRecordMap(raw["cardioRaw"], "dailyVo2Max") { it.num("vo2Max") }
 
         val sleepRecords = raw["sleepRaw"].dataPoints().mapNotNull(::parseSleepPoint)
-        val sleepByDate = sleepRecords.associateBy { it.date }
+        // When multiple sessions share a date (overnight sleep + nap), prefer the
+        // one that started earliest — same logic as the Health Connect path.
+        val sleepByDate = sleepRecords
+            .groupBy { it.date }
+            .mapValues { (_, sessions) -> sessions.minByOrNull { it.startTimeIso ?: "" }!! }
 
         val exercises = raw["activitiesRaw"].dataPoints().mapNotNull(::parseExercisePoint)
 
@@ -135,6 +139,10 @@ object HealthTranslator {
         val periodMinutes = summary.num("minutesInSleepPeriod")?.toInt()
         val efficiency = if (periodMinutes != null && periodMinutes > 0) (asleepMinutes * 100 / periodMinutes) else null
 
+        val startHour = interval?.str("startTime")?.let {
+            runCatching { java.time.Instant.parse(it).atZone(java.time.ZoneId.systemDefault()).hour }.getOrNull()
+        }
+        val isNap = startHour != null && startHour in 10..20
         return SleepSession(
             date = date,
             startTimeIso = interval?.str("startTime"),
@@ -142,6 +150,7 @@ object HealthTranslator {
             totalMinutes = asleepMinutes,
             efficiencyPercent = efficiency,
             stages = stageMinutes.map { (stage, minutes) -> SleepStageMinutes(stage, minutes) },
+            isNap = isNap,
         )
     }
 

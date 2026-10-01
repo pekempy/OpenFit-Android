@@ -54,6 +54,14 @@ class SummaryService {
         if (sleep == null) {
             return "No sleep data was recorded for last night (${bundle.selectedDate}). Write one short, friendly line telling me that and suggesting I check my tracker sync."
         }
+        // If the only recorded session started in the daytime it's a nap, not
+        // last night's sleep. Adjust the prompt so the AI doesn't describe it
+        // as overnight rest.
+        if (sleep.isNap) {
+            val h = sleep.totalMinutes / 60
+            val m = sleep.totalMinutes % 60
+            return "The only sleep session recorded for ${bundle.selectedDate} is an afternoon nap of ${h}h ${m}m (it started during the daytime, not the previous night). No overnight sleep data is available. Write one short, friendly line acknowledging the nap and noting that last night's sleep wasn't tracked — do not describe the nap as last night's sleep."
+        }
         val hours = sleep.totalMinutes / 60
         val minutes = sleep.totalMinutes % 60
         val stages = sleep.stages.joinToString(", ") { "${it.stage}: ${it.minutes}m" }
