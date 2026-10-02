@@ -198,6 +198,26 @@ fun OpenFitApp(
     val units = settings?.units ?: com.openfit.mobile.data.settings.AppUnitSettings()
     var quickLogCategory by remember { mutableStateOf<com.openfit.mobile.ui.common.QuickLogCategory?>(null) }
 
+    // Auto-trigger the Health Connect permission dialog when background access is
+    // missing and summaries are enabled. Fires every time the app opens (including
+    // from the "grant it in the app" notification tap) until the user grants it.
+    val summariesEnabled = settings?.morningSleepSummary?.enabled == true ||
+        settings?.eveningActivitySummary?.enabled == true
+    val needsBgPermission = connected &&
+        settings?.dataSourceKind == com.openfit.mobile.data.settings.HealthDataSourceKind.HEALTH_CONNECT &&
+        summariesEnabled &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(needsBgPermission) {
+        if (!needsBgPermission) return@LaunchedEffect
+        val hasBg = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            com.openfit.mobile.data.healthconnect.HealthConnectManager.BACKGROUND_READ_PERMISSION,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!hasBg) launchHealthConnectPermission { /* dialog handled; next open will see it granted */ }
+    }
+
+
     CompositionLocalProvider(LocalMetricInspector provides inspectorState) {
         Box(Modifier.fillMaxSize()) {
             Scaffold(
