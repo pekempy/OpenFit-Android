@@ -105,18 +105,22 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                     // Overnight sleep section
                     if (sleep != null) {
                         Text("Last night's sleep", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        SleepSummary(sleep, goals)
+                        SleepSummary(sleep, goals, state.bundle.fetchedAtEpochMillis)
 
                         if (sleep.stages.isNotEmpty()) {
                             Text("Stages", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            StageBreakdown(sleep)
+                            StageBreakdown(sleep, state.bundle.fetchedAtEpochMillis)
                         }
 
                         if (sleep.segments.isNotEmpty()) {
                             Text("Night timeline", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                             Card(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    SleepHypnogramChart(segments = sleep.segments, height = 150.dp)
+                                    SleepHypnogramChart(
+                                        animationKey = state.bundle.fetchedAtEpochMillis,
+                                        segments = sleep.segments,
+                                        height = 150.dp
+                                    )
                                 }
                             }
                         }
@@ -154,7 +158,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
 
                                     // Nap stage breakdown
                                     if (nap.stages.isNotEmpty()) {
-                                        StageBreakdown(nap)
+                                        StageBreakdown(nap, state.bundle.fetchedAtEpochMillis)
                                     }
                                 }
                             }
@@ -178,6 +182,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                                 val goalStr = "${sleepTargetHours}h${if (sleepTargetRemMins > 0) " ${sleepTargetRemMins}m" else ""}"
                                 DesktopColumnChart(
                                     values = state.bundle.trend.map { it.totalSleepMinutes?.toDouble() },
+                                    animationKey = state.bundle.fetchedAtEpochMillis,
                                     dates = state.bundle.trend.map { it.date },
                                     color = ChartColors.Sleep,
                                     target = sleepTargetMinutes,
@@ -195,7 +200,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SleepSummary(sleep: SleepSession, goals: com.openfit.mobile.data.settings.UserHealthGoals) {
+private fun SleepSummary(sleep: SleepSession, goals: com.openfit.mobile.data.settings.UserHealthGoals, animationKey: Long = 0L) {
     val haptics = LocalHapticFeedback.current
     val inspector = com.openfit.mobile.ui.common.LocalMetricInspector.current
     val sleepDetail = remember(sleep.totalMinutes) {
@@ -240,6 +245,7 @@ private fun SleepSummary(sleep: SleepSession, goals: com.openfit.mobile.data.set
                 if (sleep.efficiencyPercent != null) {
                     RingProgress(
                         progress = (sleep.efficiencyPercent ?: 0) / 100f,
+                        animationKey = animationKey,
                         color = ChartColors.Sleep,
                         size = 72.dp,
                         centerText = "${sleep.efficiencyPercent ?: 0}%",
@@ -255,6 +261,7 @@ private fun SleepSummary(sleep: SleepSession, goals: com.openfit.mobile.data.set
 
             BulletChart(
                 value = sleep.totalMinutes.toDouble(),
+                animationKey = animationKey,
                 target = targetMin,
                 max = (targetMin * 1.2).coerceAtLeast(540.0),
                 label = "Duration compared with $goalFormatted goal",
@@ -266,7 +273,7 @@ private fun SleepSummary(sleep: SleepSession, goals: com.openfit.mobile.data.set
 }
 
 @Composable
-private fun StageBreakdown(sleep: SleepSession) {
+private fun StageBreakdown(sleep: SleepSession, animationKey: Long = 0L) {
     val stageOrder = listOf("deep", "rem", "light", "wake")
     val byStage = sleep.stages.associateBy { it.stage }
     val totalMinutes = sleep.stages.sumOf { it.minutes }.coerceAtLeast(1)
@@ -282,7 +289,12 @@ private fun StageBreakdown(sleep: SleepSession) {
                 val segments = stageOrder.mapNotNull { stage ->
                     byStage[stage]?.minutes?.takeIf { it > 0 }?.let { (it.toFloat()) to ChartColors.sleepStageColor(stage) }
                 }
-                SegmentedBar(segments = segments, modifier = Modifier.fillMaxWidth(), height = 12.dp)
+                SegmentedBar(
+                    animationKey = animationKey,
+                    segments = segments,
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 12.dp
+                )
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

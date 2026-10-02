@@ -29,10 +29,11 @@ fun SegmentedBar(
     modifier: Modifier = Modifier,
     height: Dp = 10.dp,
     cornerRadius: Dp = 5.dp,
+    animationKey: Long = 0L,
 ) {
     val total = segments.sumOf { it.first.toDouble() }.toFloat()
-    val anim = remember(segments) { Animatable(0f) }
-    LaunchedEffect(segments) { anim.animateTo(1f, animationSpec = tween(850, easing = FastOutSlowInEasing)) }
+    val anim = remember(animationKey, segments) { Animatable(0f) }
+    LaunchedEffect(animationKey, segments) { anim.animateTo(1f, animationSpec = tween(850, easing = FastOutSlowInEasing)) }
     Canvas(modifier = modifier.fillMaxWidth().height(height)) {
         if (total <= 0f) return@Canvas
         val radiusPx = cornerRadius.toPx()

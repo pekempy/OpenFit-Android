@@ -50,6 +50,7 @@ fun DesktopColumnChart(
     height: Dp = 140.dp,
     formatter: (Double) -> String = { if (it >= 1000) "%,d".format(it.toInt()) else "%.0f".format(it) },
     modifier: Modifier = Modifier,
+    animationKey: Long = 0L,
 ) {
     val validValues = values.filterNotNull().filter { it.isFinite() }
     if (validValues.isEmpty()) {
@@ -112,8 +113,8 @@ fun DesktopColumnChart(
 
         val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
         val targetColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
-        val anim = remember(values) { Animatable(0f) }
-        LaunchedEffect(values) { anim.animateTo(1f, animationSpec = tween(1100, easing = FastOutSlowInEasing)) }
+        val anim = remember(animationKey, values) { Animatable(0f) }
+        LaunchedEffect(animationKey, values) { anim.animateTo(1f, animationSpec = tween(1100, easing = FastOutSlowInEasing)) }
 
 
         Canvas(

@@ -99,7 +99,11 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                     item {
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp)) {
-                                HourlyBarChart(values = today.stepsHourly, color = ChartColors.Movement)
+                                HourlyBarChart(
+                                    animationKey = bundle.fetchedAtEpochMillis,
+                                    values = today.stepsHourly,
+                                    color = ChartColors.Movement
+                                )
                             }
                         }
                     }
@@ -120,6 +124,7 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     DesktopColumnChart(
                                         values = bundle.trend.map { it.steps?.toDouble() },
+                                        animationKey = bundle.fetchedAtEpochMillis,
                                         dates = bundle.trend.map { it.date },
                                         color = ChartColors.Movement,
                                         target = goals.stepGoal.toDouble(),
@@ -144,6 +149,7 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                                         val elevationAvg = elevationList.filterNotNull().average()
                                         DesktopColumnChart(
                                             values = elevationList,
+                                            animationKey = bundle.fetchedAtEpochMillis,
                                             dates = bundle.trend.map { it.date },
                                             color = ChartColors.Movement,
                                             target = elevationAvg,

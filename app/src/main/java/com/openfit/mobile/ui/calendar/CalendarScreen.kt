@@ -131,6 +131,7 @@ fun CalendarScreen(container: AppContainer) {
     val viewMode      by vm.viewMode.collectAsState()
     val settings      by container.settingsRepository.settingsFlow.collectAsState(initial = null)
     val isBackfilling by vm.isBackfilling.collectAsState()
+    val weekSnapshots by vm.weekSnapshots.collectAsState()
 
     val today     = remember { LocalDate.now() }
     val thisMonth = remember { YearMonth.now() }
@@ -171,6 +172,7 @@ fun CalendarScreen(container: AppContainer) {
             .collect { (_, page) -> vm.loadMonth(pageToMonth(page)) }
     }
     // Load data when week pager settles
+    // Load data when week pager settles — also request snapshot data for the week
     LaunchedEffect(weekPager) {
         snapshotFlow { weekPager.isScrollInProgress to weekPager.currentPage }
             .filter { (scrolling, _) -> !scrolling }
@@ -180,6 +182,7 @@ fun CalendarScreen(container: AppContainer) {
                 val we = ws.plusDays(6)
                 if (YearMonth.from(we) != YearMonth.from(ws))
                     vm.loadMonth(YearMonth.from(we))
+                vm.loadWeek(ws)
             }
     }
 
@@ -236,8 +239,8 @@ fun CalendarScreen(container: AppContainer) {
             onModeChange = { vm.setViewMode(it) },
         )
 
-        // Day-of-week header (Mon … Sun)
-        DayOfWeekLabels()
+        // Day-of-week header — only relevant in month grid view
+        if (viewMode == CalendarViewMode.MONTH) DayOfWeekLabels()
 
         // Data limit banner: shown when HC history is short OR while backfill is active
         val dataAvailableSince = (calendarState as? CalendarUiState.Ready)?.dataAvailableSince
@@ -294,6 +297,7 @@ fun CalendarScreen(container: AppContainer) {
                         today         = today,
                         selectedDate  = selectedDate,
                         calendarState = calendarState,
+                        weekSnapshots = weekSnapshots,
                         onDaySelect   = { vm.selectDate(it) },
                     )
                 }
@@ -614,7 +618,7 @@ private fun MonthGrid(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// Week strip (one row of 7 taller cells)
+// Week view — vertical list, Mon→Sun, stats on the right
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -623,35 +627,209 @@ private fun WeekStrip(
     today: LocalDate,
     selectedDate: LocalDate?,
     calendarState: CalendarUiState,
+    weekSnapshots: Map<String, com.openfit.mobile.model.DailySnapshot>,
     onDaySelect: (LocalDate) -> Unit,
 ) {
     val indicators = (calendarState as? CalendarUiState.Ready)?.indicators ?: emptyMap()
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         (0..6).forEach { offset ->
             val date      = weekStart.plusDays(offset.toLong())
             val isFuture  = date > today
+            val snapshot  = weekSnapshots[date.toString()]
             val indicator = indicators[date.toString()]
 
-            WeekDayCell(
-                date        = date,
-                isToday     = date == today,
-                isSelected  = date == selectedDate,
-                isFuture    = isFuture,
-                indicators  = indicator,
-                onClick     = { if (!isFuture) onDaySelect(date) },
-                modifier    = Modifier.weight(1f),
+            WeekDayRow(
+                date       = date,
+                isToday    = date == today,
+                isSelected = date == selectedDate,
+                isFuture   = isFuture,
+                snapshot   = snapshot,
+                indicator  = indicator,
+                onClick    = { if (!isFuture) onDaySelect(date) },
             )
         }
     }
 }
 
+@Composable
+private fun WeekDayRow(
+    date: LocalDate,
+    isToday: Boolean,
+    isSelected: Boolean,
+    isFuture: Boolean,
+    snapshot: com.openfit.mobile.model.DailySnapshot?,
+    indicator: DayIndicators?,
+    onClick: () -> Unit,
+) {
+    val primary   = MaterialTheme.colorScheme.primary
+    val onPrimary = MaterialTheme.colorScheme.onPrimary
+
+    val bgColor by animateColorAsState(
+        targetValue = when {
+            isSelected -> primary
+            isToday    -> primary.copy(alpha = 0.10f)
+            else       -> MaterialTheme.colorScheme.surface
+        },
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "weekRowBg",
+    )
+    val textColor = when {
+        isSelected -> onPrimary
+        isFuture   -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
+        isToday    -> primary
+        else       -> MaterialTheme.colorScheme.onSurface
+    }
+
+    ElevatedCard(
+        onClick   = { if (!isFuture) onClick() },
+        modifier  = Modifier.fillMaxWidth(),
+        colors    = CardDefaults.elevatedCardColors(containerColor = bgColor),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = if (isSelected) 4.dp else 1.dp
+        ),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier          = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // ── Left: day abbreviation + date number ─────────────────────────
+            Column(
+                modifier            = Modifier.width(52.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text  = date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.getDefault()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = textColor.copy(alpha = if (isSelected) 0.75f else 0.55f),
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text       = date.dayOfMonth.toString(),
+                    style      = MaterialTheme.typography.titleLarge,
+                    fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
+                    color      = textColor,
+                )
+            }
+
+            // Divider
+            Box(
+                modifier = Modifier
+                    .padding(horizontal = 12.dp)
+                    .width(1.dp)
+                    .height(36.dp)
+                    .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+            )
+
+            // ── Right: stat chips ─────────────────────────────────────────────
+            if (snapshot != null) {
+                WeekStatRow(snapshot = snapshot, isSelected = isSelected)
+            } else if (indicator?.hasAny == true) {
+                // Snapshot not yet loaded — show coloured dots as placeholder
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment     = Alignment.CenterVertically,
+                ) {
+                    if (indicator.hasSteps) DataDot(ChartColors.Movement, isSelected)
+                    if (indicator.hasSleep) DataDot(ChartColors.Sleep, isSelected)
+                    if (indicator.hasHR)    DataDot(ChartColors.Heart, isSelected)
+                }
+            } else if (!isFuture) {
+                Text(
+                    "No data",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun WeekStatRow(
+    snapshot: com.openfit.mobile.model.DailySnapshot,
+    isSelected: Boolean,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment     = Alignment.CenterVertically,
+        modifier              = Modifier.fillMaxWidth(),
+    ) {
+        // Steps
+        val steps = snapshot.steps ?: 0
+        if (steps > 0) {
+            WeekStatChip(
+                icon      = Icons.Filled.DirectionsWalk,
+                color     = ChartColors.Movement,
+                label     = if (steps >= 10_000) "${"%.1f".format(steps / 1000.0)}k"
+                            else if (steps >= 1_000) "${steps / 1000}k" else "$steps",
+                isSelected = isSelected,
+            )
+        }
+
+        // Sleep
+        val sleep = snapshot.sleep
+        if (sleep != null && sleep.totalMinutes > 0) {
+            val h = sleep.totalMinutes / 60
+            val m = sleep.totalMinutes % 60
+            WeekStatChip(
+                icon      = Icons.Filled.Bedtime,
+                color     = ChartColors.Sleep,
+                label     = if (m > 0) "${h}h ${m}m" else "${h}h",
+                isSelected = isSelected,
+            )
+        }
+
+        // Heart rate (resting preferred, avg fallback)
+        val hr = snapshot.restingHeartRateBpm ?: snapshot.heartRateAvgBpm
+        if (hr != null) {
+            WeekStatChip(
+                icon      = Icons.Filled.Favorite,
+                color     = ChartColors.Heart,
+                label     = "$hr",
+                isSelected = isSelected,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeekStatChip(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    color: Color,
+    label: String,
+    isSelected: Boolean,
+) {
+    Row(
+        verticalAlignment     = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Icon(
+            imageVector        = icon,
+            contentDescription = null,
+            tint               = if (isSelected) Color.White.copy(alpha = 0.85f) else color,
+            modifier           = Modifier.size(14.dp),
+        )
+        Text(
+            text       = label,
+            style      = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color      = if (isSelected) Color.White
+                         else MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
-// Individual day cells
+// Month-view individual day cells
 // ═════════════════════════════════════════════════════════════════════════════
 
 @Composable
@@ -711,8 +889,6 @@ private fun DayCell(
             color      = textColor,
             fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
         )
-
-        // Indicator dots with animated entrance
         Row(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment     = Alignment.CenterVertically,
@@ -722,88 +898,14 @@ private fun DayCell(
                     visible = indicators.hasSteps,
                     enter   = scaleIn(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
                 ) { DataDot(ChartColors.Movement, isSelected) }
-
                 AnimatedVisibility(
                     visible = indicators.hasSleep,
                     enter   = scaleIn(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
                 ) { DataDot(ChartColors.Sleep, isSelected) }
-
                 AnimatedVisibility(
                     visible = indicators.hasHR,
                     enter   = scaleIn(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
                 ) { DataDot(ChartColors.Heart, isSelected) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun WeekDayCell(
-    date: LocalDate,
-    isToday: Boolean,
-    isSelected: Boolean,
-    isFuture: Boolean,
-    indicators: DayIndicators?,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val primary   = MaterialTheme.colorScheme.primary
-    val onPrimary = MaterialTheme.colorScheme.onPrimary
-
-    val bgColor by animateColorAsState(
-        targetValue = when {
-            isSelected -> primary
-            isToday    -> primary.copy(alpha = 0.12f)
-            else       -> Color.Transparent
-        },
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = "weekCellBg",
-    )
-    val textColor = when {
-        isSelected -> onPrimary
-        isFuture   -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.28f)
-        isToday    -> primary
-        else       -> MaterialTheme.colorScheme.onSurface
-    }
-
-    Column(
-        modifier = modifier
-            .height(96.dp)
-            .padding(3.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(bgColor)
-            .then(
-                if (isToday && !isSelected)
-                    Modifier.border(1.5.dp, primary, RoundedCornerShape(14.dp))
-                else Modifier
-            )
-            .clickable(enabled = !isFuture) { onClick() }
-            .padding(vertical = 10.dp, horizontal = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween,
-    ) {
-        // Day letter (M T W …)
-        Text(
-            text  = date.dayOfWeek.getDisplayName(TextStyle.NARROW, Locale.getDefault()),
-            style = MaterialTheme.typography.labelSmall,
-            color = textColor.copy(alpha = if (isSelected) 0.8f else 0.55f),
-        )
-        // Date number
-        Text(
-            text       = date.dayOfMonth.toString(),
-            style      = MaterialTheme.typography.titleMedium,
-            fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-            color      = textColor,
-        )
-        // Dots
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment     = Alignment.CenterVertically,
-        ) {
-            if (indicators != null && !isFuture) {
-                if (indicators.hasSteps) DataDot(ChartColors.Movement, isSelected)
-                if (indicators.hasSleep) DataDot(ChartColors.Sleep, isSelected)
-                if (indicators.hasHR)    DataDot(ChartColors.Heart, isSelected)
             }
         }
     }

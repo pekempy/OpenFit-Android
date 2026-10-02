@@ -6,131 +6,192 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.openfit.mobile.R
 
-enum class WearableCategory(val displayName: String) {
-    SMART_WATCH("Smart Watch"),
-    FITNESS_TRACKER("Fitness Tracker"),
-    SMART_RING("Smart Ring"),
-    SMART_SCALE("Smart Scale"),
-    SMARTPHONE("Smartphone"),
-    MANUAL_ENTRY("Manual Entry"),
-    GENERIC_WEARABLE("Wearable Sensor"),
+enum class WearableCategory {
+    SMART_WATCH, FITNESS_BAND, SMART_RING,
+    CHEST_STRAP, SCALE, PHONE, GENERIC_WEARABLE, UNKNOWN
 }
 
 data class DeviceContribution(
-    val deviceId: String,
     val deviceName: String,
-    val category: WearableCategory,
-    val sensorDescription: String,
     @DrawableRes val imageRes: Int? = null,
     val icon: ImageVector,
-    val isContributing: Boolean,
     val batteryPercent: Int? = null,
+    val sensorDescription: String,
 )
 
 data class MetricAttribution(
-    val metricKey: String,
     val contributingDevices: List<DeviceContribution>,
     val summaryText: String,
 )
 
 object WearableRegistry {
 
-    fun resolveCategory(name: String): WearableCategory {
-        val lower = name.lowercase()
+    // ── Category resolution ───────────────────────────────────────────────
+    // Checks are ordered from most-specific to least-specific.
+    // HC device type takes priority over name matching when available.
+
+    fun resolveCategory(deviceType: String?, deviceVersion: String? = ""): WearableCategory {
+        // deviceVersion is the typeLabel from HC ("Watch", "Phone", "Ring", etc.)
+        val version = (deviceVersion ?: "").lowercase()
+        val lower   = (deviceType ?: "").lowercase()
+
+        // Authoritative type label from Health Connect
         return when {
-            "ring" in lower || "oura" in lower || "ultrahuman" in lower -> WearableCategory.SMART_RING
-            "watch" in lower || "wear os" in lower || "garmin" in lower -> WearableCategory.SMART_WATCH
-            "air" in lower || "band" in lower || "tracker" in lower || "charge" in lower || "inspire" in lower || "whoop" in lower -> WearableCategory.FITNESS_TRACKER
-            "scale" in lower || "aria" in lower || "withings body" in lower -> WearableCategory.SMART_SCALE
-            "phone" in lower || "pixel" in lower || "galaxy s" in lower -> WearableCategory.SMARTPHONE
-            "manual" in lower || "quick log" in lower -> WearableCategory.MANUAL_ENTRY
-            else -> WearableCategory.GENERIC_WEARABLE
+            version == "ring"                                     -> WearableCategory.SMART_RING
+            version == "fitness band"                             -> WearableCategory.FITNESS_BAND
+            version == "chest strap"                              -> WearableCategory.CHEST_STRAP
+            version == "scale"                                    -> WearableCategory.SCALE
+            version == "phone"                                    -> WearableCategory.PHONE
+            version == "watch" || version == "head-mounted"       -> WearableCategory.SMART_WATCH
+
+            // Ring brands
+            "oura" in lower || "galaxy ring" in lower
+            || "ultrahuman" in lower || "circular" in lower
+            || "evie" in lower || "motiv" in lower               -> WearableCategory.SMART_RING
+
+            // Chest straps
+            "chest" in lower || "hrm" in lower
+            || "h7" in lower || "h9" in lower || "h10" in lower  -> WearableCategory.CHEST_STRAP
+
+            // Scales / body composition
+            "scale" in lower || "body+" in lower
+            || "body comp" in lower || "withings" in lower
+            || "qardio" in lower || "eufy" in lower              -> WearableCategory.SCALE
+
+            // Bands (must come before generic watch check)
+            "band" in lower || "charge" in lower
+            || "inspire" in lower || "ace" in lower
+            || "mi band" in lower || "smart band" in lower
+            || "whoop" in lower || "fitbit" in lower             -> WearableCategory.FITNESS_BAND
+
+            // Smart watches — explicit brand list
+            "watch" in lower || "pixel watch" in lower
+            || "galaxy watch" in lower || "apple watch" in lower
+            || "fenix" in lower || "forerunner" in lower
+            || "venu" in lower || "vivoactive" in lower
+            || "marq" in lower || "instinct" in lower
+            || "ignite" in lower || "vantage" in lower
+            || "pacer" in lower || "unite" in lower
+            || "gts" in lower || "gtr" in lower
+            || "t-rex" in lower || "falcon" in lower
+            || "bip" in lower || "cheetah" in lower
+            || "versa" in lower || "sense" in lower
+            || "luxe" in lower
+            || "scan" in lower                                   -> WearableCategory.SMART_WATCH
+
+            "phone" in lower || "pixel" in lower
+            || "samsung" in lower && "ring" !in lower
+            || "oneplus" in lower || "xiaomi" in lower
+            || "oppo" in lower || "nothing" in lower             -> WearableCategory.PHONE
+
+            else                                                 -> WearableCategory.GENERIC_WEARABLE
         }
     }
 
-    @DrawableRes
-    fun imageFor(name: String): Int? {
-        val lower = name.lowercase()
+    // ── Image resolution ──────────────────────────────────────────────────
+    // Returns a drawable resource name (without R.drawable. prefix).
+    // Returns null → caller falls back to iconFor().
+
+    fun imageFor(deviceType: String?, deviceVersion: String? = ""): String? {
+        val h = ((deviceType ?: "") + " " + (deviceVersion ?: "")).lowercase()
         return when {
-            "air" in lower || ("fitbit" in lower && "watch" !in lower) -> R.drawable.device_fitbit_air
-            "pixel watch" in lower -> R.drawable.device_pixel_watch_4
-            "pixel" in lower -> R.drawable.device_pixel_10_pro_xl
-            else -> null
+            "pixel watch" in h                       -> "device_pixel_watch_4"
+            "fitbit" in h && "air" in h              -> "device_fitbit_air"
+            "fitbit" in h                            -> "device_fitbit"
+            "pixel" in h && "watch" !in h            -> "device_pixel_10_pro_xl"
+            "pixel" in h                             -> "device_pixel_watch_4"
+            else                                     -> null
         }
     }
+
+    // ── Icon fallback ─────────────────────────────────────────────────────
 
     fun iconFor(category: WearableCategory): ImageVector {
         return when (category) {
-            WearableCategory.SMART_WATCH -> Icons.Filled.Watch
-            WearableCategory.FITNESS_TRACKER -> Icons.Filled.DirectionsRun
-            WearableCategory.SMART_RING -> Icons.Filled.RadioButtonChecked
-            WearableCategory.SMART_SCALE -> Icons.Filled.MonitorWeight
-            WearableCategory.SMARTPHONE -> Icons.Filled.Smartphone
-            WearableCategory.MANUAL_ENTRY -> Icons.Filled.EditNote
-            WearableCategory.GENERIC_WEARABLE -> Icons.Filled.Sensors
+            WearableCategory.SMART_WATCH    -> Icons.Filled.Watch
+            WearableCategory.FITNESS_BAND   -> Icons.Filled.Watch
+            WearableCategory.SMART_RING     -> Icons.Filled.RadioButtonUnchecked
+            WearableCategory.CHEST_STRAP    -> Icons.Filled.FavoriteBorder
+            WearableCategory.SCALE          -> Icons.Filled.MonitorWeight
+            WearableCategory.PHONE          -> Icons.Filled.PhoneAndroid
+            else                            -> Icons.Filled.DeviceUnknown
         }
     }
 
-    /** Maps a [MetricDetail] title to the signal name(s) recorded against each
-     * [PairedDevice] in [HealthConnectRepository] - pure vocabulary
-     * translation between two independently-worded naming schemes, nothing
-     * device- or brand-specific. */
-    private val METRIC_TITLE_TO_SIGNALS: Map<String, List<String>> = mapOf(
-        "heart rate variability (hrv)" to listOf("HRV"),
-        "blood oxygen (spo2)" to listOf("SpO2"),
-        "resting heart rate (rhr)" to listOf("Resting HR", "Heart Rate"),
-        "breathing rate" to listOf("Breathing"),
-        "skin temperature" to listOf("Skin Temp"),
-        "steps & movement" to listOf("Steps"),
-        "sleep duration & quality" to listOf("Sleep"),
-        "total energy burn" to listOf("Calories"),
-        "distance" to listOf("Distance"),
-        "floors climbed" to listOf("Floors"),
-        "active & zone minutes" to listOf("Calories", "Workouts"),
-        "weight" to listOf("Weight"),
-        "body fat percentage" to listOf("Body Fat"),
-        "daily hydration" to listOf("Hydration"),
-        "cardio fitness (vo2 max)" to listOf("VO2 Max"),
-    )
+    // ── Attribution: signal → device → metric mapping ─────────────────────
+    // Determines which PairedDevice objects contributed to a given metric.
+    // Returns MetricAttribution with the list of contributing devices and a
+    // summary text describing the overall contribution.
 
-    /** Which of the user's real paired devices actually contributed to a
-     * given metric today - driven entirely by [PairedDevice.signals], which
-     * [HealthConnectRepository] populates from each record's real Health
-     * Connect metadata. No device name/brand is special-cased: any device,
-     * however unfamiliar, shows up correctly here as long as it wrote a
-     * real Health Connect record for that metric. */
     fun getAttribution(metricTitle: String, devices: List<PairedDevice>): MetricAttribution {
-        val key = metricTitle.lowercase().trim()
-        val candidateSignals = METRIC_TITLE_TO_SIGNALS[key] ?: listOf(metricTitle)
+        val relevant = devices.mapNotNull { device ->
+            val matching = device.signals.filter { sig ->
+                signalMatchesMetric(sig, metricTitle)
+            }
+            if (matching.isEmpty()) return@mapNotNull null
 
-        val contributing = devices.filter { dev ->
-            dev.signals.any { signal -> candidateSignals.any { candidate -> signal.equals(candidate, ignoreCase = true) } }
-        }.map { dev ->
-            val name = dev.deviceType ?: dev.deviceVersion ?: "Connected device"
-            val category = resolveCategory(name)
+            val category = resolveCategory(device.deviceType, device.deviceVersion)
+            val imageResId = deviceImageResourceId(device.deviceType, device.deviceVersion)
+            val icon = iconFor(category)
+            val sensorDesc = "Synced via Health Connect"
+
             DeviceContribution(
-                deviceId = dev.id,
-                deviceName = name,
-                category = category,
-                sensorDescription = "${dev.deviceVersion ?: "Device"} synced via Health Connect",
-                imageRes = imageFor(name),
-                icon = iconFor(category),
-                isContributing = true,
-                batteryPercent = dev.batteryLevelPercent,
+                deviceName = device.deviceType ?: "Unknown Device",
+                imageRes = imageResId,
+                icon = icon,
+                batteryPercent = device.batteryLevelPercent,
+                sensorDescription = sensorDesc,
             )
         }
 
-        val summary = when {
-            contributing.size == 1 -> "${contributing.first().deviceName} is the exclusive data source."
-            contributing.size > 1 ->
-                "Contributed simultaneously by ${contributing.size} devices (${contributing.joinToString(", ") { it.deviceName }}) and deduplicated via Google Health Connect."
-            else -> "Synchronised via Google Health Connect from verified wearable sensors."
+        val summaryText = when {
+            relevant.isEmpty() -> "No devices recorded this metric"
+            relevant.size == 1 -> "${relevant[0].deviceName} recorded this"
+            else -> "${relevant.size} devices recorded this"
         }
 
         return MetricAttribution(
-            metricKey = key,
-            contributingDevices = contributing,
-            summaryText = summary,
+            contributingDevices = relevant,
+            summaryText = summaryText,
         )
+    }
+
+    private fun deviceImageResourceId(deviceType: String?, deviceVersion: String?): Int? {
+        val name = imageFor(deviceType, deviceVersion) ?: return null
+        return drawableIdByName(name)
+    }
+
+    private fun drawableIdByName(name: String): Int? = when (name) {
+        "device_pixel_watch_4"    -> R.drawable.device_pixel_watch_4
+        "device_pixel_watch"      -> R.drawable.device_pixel_watch
+        "device_pixel_10_pro_xl"  -> R.drawable.device_pixel_10_pro_xl
+        "device_fitbit_air"       -> R.drawable.device_fitbit_air
+        "device_fitbit"           -> R.drawable.device_fitbit
+        else                      -> null
+    }
+
+    private fun signalMatchesMetric(signal: String, metricTitle: String): Boolean {
+        val s = signal.lowercase()
+        val m = metricTitle.lowercase()
+        return when {
+            m.contains("step")       -> s == "steps" || s == "distance" || s == "floors"
+            m.contains("sleep")      -> s == "sleep"
+            m.contains("heart") || m.contains("resting") || m.contains("rhr") ->
+                s == "heart rate" || s == "resting hr"
+            m.contains("hrv")        -> s == "hrv"
+            m.contains("spo") || m.contains("oxygen") -> s == "spo2"
+            m.contains("breath")     -> s == "breathing"
+            m.contains("temp")       -> s == "skin temp"
+            m.contains("calori")     -> s == "calories"
+            m.contains("distance")   -> s == "distance"
+            m.contains("floor")      -> s == "floors"
+            m.contains("active")     -> s == "calories" || s == "steps"
+            m.contains("weight")     -> s == "weight"
+            m.contains("body fat")   -> s == "body fat"
+            m.contains("vo2")        -> s == "vo2 max"
+            m.contains("water") || m.contains("hydra") -> s == "hydration"
+            m.contains("workout") || m.contains("exercise") -> s == "workouts"
+            else -> false
+        }
     }
 }

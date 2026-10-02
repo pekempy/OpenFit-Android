@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun RingProgress(
     progress: Float,
+    animationKey: Long = 0L,
     color: Color,
     modifier: Modifier = Modifier,
     size: Dp = 64.dp,
@@ -33,8 +34,8 @@ fun RingProgress(
     centerText: String? = null,
     centerSubText: String? = null,
 ) {
-    val animProg = remember(progress) { Animatable(0f) }
-    LaunchedEffect(progress) {
+    val animProg = remember(animationKey, progress) { Animatable(0f) }
+    LaunchedEffect(animationKey, progress) {
         animProg.animateTo(
             progress.coerceIn(0f, 1f),
             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),

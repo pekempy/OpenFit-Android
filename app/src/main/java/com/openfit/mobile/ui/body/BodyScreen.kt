@@ -173,6 +173,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                             }
                             BulletChart(
                                 value = today.waterLiters ?: 0.0,
+                                animationKey = state.bundle.fetchedAtEpochMillis,
                                 target = goals.waterLitersGoal,
                                 max = (goals.waterLitersGoal * 1.25).coerceAtLeast(3.0),
                                 label = "Daily hydration target (%.2f L)".format(goals.waterLitersGoal),
@@ -196,6 +197,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                                 val weightAvg = weightList.filterNotNull().average()
                                 DesktopLineChart(
                                     values = weightList,
+                                    animationKey = state.bundle.fetchedAtEpochMillis,
                                     dates = trend.map { it.date },
                                     color = ChartColors.Body,
                                     target = weightAvg,
@@ -219,6 +221,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                                 val waterMassAvg = waterMassList.filterNotNull().average()
                                 DesktopLineChart(
                                     values = waterMassList,
+                                    animationKey = state.bundle.fetchedAtEpochMillis,
                                     dates = trend.map { it.date },
                                     color = ChartColors.Hrv,
                                     target = waterMassAvg,
@@ -242,6 +245,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                                 val bmrAvg = bmrList.filterNotNull().average()
                                 DesktopLineChart(
                                     values = bmrList,
+                                    animationKey = state.bundle.fetchedAtEpochMillis,
                                     dates = trend.map { it.date },
                                     color = ChartColors.Body,
                                     target = bmrAvg,

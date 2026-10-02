@@ -40,13 +40,14 @@ fun BulletChart(
     valueLabel: String? = null,
     color: Color = ChartColors.Movement,
     modifier: Modifier = Modifier,
+    animationKey: Long = 0L,
 ) {
     if (value == null) return
     val safeMax = max(max, max(value, target ?: 0.0)).coerceAtLeast(1.0)
     val valuePercent = (value / safeMax).toFloat().coerceIn(0f, 1f)
     val targetPercent = target?.let { (it / safeMax).toFloat().coerceIn(0f, 1f) }
-    val animPercent = remember(value) { Animatable(0f) }
-    LaunchedEffect(value) { animPercent.animateTo(valuePercent, animationSpec = tween(900, easing = FastOutSlowInEasing)) }
+    val animPercent = remember(animationKey, value) { Animatable(0f) }
+    LaunchedEffect(animationKey, value) { animPercent.animateTo(valuePercent, animationSpec = tween(900, easing = FastOutSlowInEasing)) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(

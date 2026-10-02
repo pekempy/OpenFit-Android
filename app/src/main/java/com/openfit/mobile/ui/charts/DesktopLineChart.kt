@@ -53,6 +53,7 @@ fun DesktopLineChart(
     height: Dp = 140.dp,
     showArea: Boolean = true,
     modifier: Modifier = Modifier,
+    animationKey: Long = 0L,
 ) {
     val validValues = values.filterNotNull().filter { it.isFinite() }
     if (validValues.isEmpty()) {
@@ -127,8 +128,8 @@ fun DesktopLineChart(
         val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
         val targetColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
 
-        val anim = remember(values) { Animatable(0f) }
-        LaunchedEffect(values) { anim.animateTo(1f, animationSpec = tween(1200, easing = FastOutSlowInEasing)) }
+        val anim = remember(animationKey, values) { Animatable(0f) }
+        LaunchedEffect(animationKey, values) { anim.animateTo(1f, animationSpec = tween(1200, easing = FastOutSlowInEasing)) }
 
         Canvas(
             modifier = Modifier

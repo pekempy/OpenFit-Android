@@ -216,6 +216,7 @@ private fun TodayContent(container: AppContainer, padding: PaddingValues, state:
                         }
                         RingProgress(
                             progress = stepGoalFraction,
+                            animationKey = bundle.fetchedAtEpochMillis,
                             color = ChartColors.Movement,
                             size = 80.dp,
                             centerText = "${(stepGoalFraction * 100).toInt()}%",
@@ -227,6 +228,7 @@ private fun TodayContent(container: AppContainer, padding: PaddingValues, state:
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                         HourlyBarChart(
                             values = today.stepsHourly,
+                            animationKey = bundle.fetchedAtEpochMillis,
                             color = ChartColors.Movement,
                             modifier = Modifier.fillMaxWidth(),
                         )
@@ -289,7 +291,12 @@ private fun TodayContent(container: AppContainer, padding: PaddingValues, state:
                                 }
                             }
                             if (segments.isNotEmpty()) {
-                                SegmentedBar(segments = segments, height = 12.dp, cornerRadius = 6.dp)
+                                SegmentedBar(
+                                    animationKey = bundle.fetchedAtEpochMillis,
+                                    segments = segments,
+                                    height = 12.dp,
+                                    cornerRadius = 6.dp
+                                )
                                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     sleep.stages.forEach { stage ->
                                         val color = stageColors[stage.stage] ?: return@forEach
@@ -382,6 +389,7 @@ private fun TodayContent(container: AppContainer, padding: PaddingValues, state:
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                             DesktopLineChart(
                                 values = rhrTrend,
+                                animationKey = bundle.fetchedAtEpochMillis,
                                 dates = trend.map { it.date },
                                 color = ChartColors.Heart,
                                 target = rhrTrend.filterNotNull().average(),

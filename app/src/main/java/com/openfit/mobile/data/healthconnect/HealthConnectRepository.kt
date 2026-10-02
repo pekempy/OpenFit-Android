@@ -54,6 +54,7 @@ import com.openfit.mobile.model.ExerciseSession
 import com.openfit.mobile.model.HealthSnapshotBundle
 import com.openfit.mobile.model.PairedDevice
 import com.openfit.mobile.model.SleepSession
+import com.openfit.mobile.model.WearableRegistry
 import com.openfit.mobile.model.SleepStageMinutes
 import com.openfit.mobile.model.SleepStageSegment
 import kotlinx.coroutines.async
@@ -712,6 +713,60 @@ class HealthConnectRepository(
             }
         }
 
+        // ── BT fallback: surface bonded wearables not yet in finalDevices ──────────
+        // If a wearable is paired via Bluetooth but has not written any HC
+        // records yet (e.g. just paired, or only sync'd once), it won't appear
+        // in finalDevices at all. Surface it as a secondary entry with no
+        // signals so the user can see it's connected.
+        //
+        // Dedup: skip BT device if its name tokens overlap with any already-
+        // present finalDevices entry.
+        val devicesWithBtFallback: List<PairedDevice> = run {
+            if (btBatteryByName.isEmpty()) return@run finalDevices
+
+            val existingTokens: Set<String> = finalDevices
+                .flatMap { d ->
+                    (d.deviceType + " " + (d.deviceVersion))
+                        .lowercase()
+                        .split(Regex("\\s+"))
+                        .filter { it.length >= 3 }
+                }
+                .toSet()
+
+            val btExtras = btBatteryByName.entries.mapNotNull { (btName, batteryLevel) ->
+                val tokens = btName.lowercase()
+                    .split(Regex("\\s+"))
+                    .filter { it.length >= 3 }
+
+                // Skip if this BT device is already covered by an HC entry
+                if (tokens.any { it in existingTokens }) return@mapNotNull null
+
+                // Only surface wearable-category BT devices (not headphones, speakers, etc.)
+                val category = WearableRegistry.resolveCategory(btName)
+                if (category == com.openfit.mobile.model.WearableCategory.UNKNOWN ||
+                    category == com.openfit.mobile.model.WearableCategory.PHONE) return@mapNotNull null
+
+                val typeLabel = when (category) {
+                    com.openfit.mobile.model.WearableCategory.SMART_WATCH  -> "Watch"
+                    com.openfit.mobile.model.WearableCategory.FITNESS_BAND -> "Fitness Band"
+                    com.openfit.mobile.model.WearableCategory.SMART_RING   -> "Ring"
+                    com.openfit.mobile.model.WearableCategory.CHEST_STRAP  -> "Chest Strap"
+                    com.openfit.mobile.model.WearableCategory.SCALE        -> "Scale"
+                    else -> "Wearable"
+                }
+                PairedDevice(
+                    id = "bt_${btName.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')}",
+                    deviceType = btName.split(" ").joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } },
+                    deviceVersion = typeLabel,
+                    batteryLevelPercent = batteryLevel,
+                    lastSyncTimeIso = null,
+                    signals = emptyList(), // no HC data yet
+                )
+            }
+
+            finalDevices + btExtras
+        }
+
         val reproductiveHealthEvents = buildList {
             for (r in menstruationFlowRecords) {
                 val flowLabel = when (r.flow) {
@@ -756,7 +811,7 @@ class HealthConnectRepository(
             today = today,
             trend = trend,
             exercises = exercises.filter { it.date == selectedDate },
-            devices = finalDevices,
+            devices = devicesWithBtFallback,
             reproductiveHealthEvents = reproductiveHealthEvents,
             fetchedAtEpochMillis = System.currentTimeMillis(),
             partial = false,

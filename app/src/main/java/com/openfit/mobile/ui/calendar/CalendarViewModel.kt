@@ -97,6 +97,11 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
     /** True while the background historical fetch is walking backwards through HC data. */
     val isBackfilling: StateFlow<Boolean> = _isBackfilling.asStateFlow()
 
+    /** Snapshots for the currently-viewed week — populated by [loadWeek].
+     *  Used by the week view to show actual step counts, sleep durations etc. */
+    private val _weekSnapshots = MutableStateFlow<Map<String, DailySnapshot>>(emptyMap())
+    val weekSnapshots: StateFlow<Map<String, DailySnapshot>> = _weekSnapshots.asStateFlow()
+
 
     init {
         viewModelScope.launch {
@@ -346,8 +351,11 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
 
     private suspend fun probeEarliestDate() {
         val settings = container.settingsRepository.settingsFlow.first()
-        // Only meaningful for Health Connect; Google Health API has full history.
+        // Only cap the calendar range for HC-only mode. When the Google Health
+        // API is also connected (via FallbackHealthDataSource) it has years of
+        // history, so the backfill should go back freely to the 10-year hard stop.
         if (settings.dataSourceKind != com.openfit.mobile.data.settings.HealthDataSourceKind.HEALTH_CONNECT) return
+        if (container.authManager.isConnected()) return   // API fallback has full history
         dataAvailableSince = container.healthConnectRepository.getEarliestDataDate()
     }
 
@@ -433,5 +441,62 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
                 _isBackfilling.value = false
             }
         }
+    }
+
+    /**
+     * Loads actual DailySnapshot values for the given week so the week view
+     * can display real step counts, sleep durations and heart rate rather than
+     * just indicator dots.
+     *
+     * Serves from [snapshotCache] immediately, then fetches fresh for recent
+     * weeks (within 30 days of today) so the data is up to date.
+     */
+    fun loadWeek(weekStart: LocalDate) {
+        // Serve from cache first — instant, no network call
+        publishWeekFromCache(weekStart)
+
+        viewModelScope.launch {
+            val today   = LocalDate.now()
+            val weekEnd = weekStart.plusDays(6)
+
+            // Don't re-fetch weeks older than 30 days — they're already in the
+            // disk-backed indicator cache and the backfill will have covered them.
+            if (weekEnd < today.minusDays(30)) return@launch
+
+            runCatching {
+                val settings = container.settingsRepository.settingsFlow.first()
+                val source   = container.activeHealthDataSource(settings.dataSourceKind)
+                if (!source.isConnected()) return@launch
+
+                val anchor = minOf(weekEnd, today)
+                val bundle = source.sync(anchor.toString())
+
+                synchronized(snapshotCache) {
+                    bundle.trend.forEach { snapshotCache[it.date] = it }
+                    snapshotCache[bundle.today.date] = bundle.today
+                }
+                synchronized(indicatorCache) {
+                    (bundle.trend + bundle.today).forEach { snap ->
+                        indicatorCache[snap.date] = DayIndicators(
+                            hasSteps = (snap.steps ?: 0) > 0,
+                            hasSleep = snap.sleep != null && snap.sleep.totalMinutes > 0,
+                            hasHR    = snap.restingHeartRateBpm != null || snap.heartRateAvgBpm != null,
+                        )
+                    }
+                }
+                publishWeekFromCache(weekStart)
+                rebuildIndicators(isLoading = false)
+            }
+        }
+    }
+
+    private fun publishWeekFromCache(weekStart: LocalDate) {
+        val week = synchronized(snapshotCache) {
+            (0..6).mapNotNull { d ->
+                val key = weekStart.plusDays(d.toLong()).toString()
+                snapshotCache[key]?.let { key to it }
+            }.toMap()
+        }
+        _weekSnapshots.value = week
     }
 }

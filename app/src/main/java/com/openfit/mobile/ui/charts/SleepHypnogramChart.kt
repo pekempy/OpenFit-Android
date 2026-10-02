@@ -38,6 +38,7 @@ import java.util.Locale
 fun SleepHypnogramChart(
     segments: List<SleepStageSegment>,
     height: Dp = 160.dp,
+    animationKey: Long = 0L,
     modifier: Modifier = Modifier,
 ) {
     if (segments.isEmpty()) {
@@ -74,8 +75,8 @@ fun SleepHypnogramChart(
     val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
     val connectorColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
-    val anim = remember(segments) { Animatable(0f) }
-    LaunchedEffect(segments) { anim.animateTo(1f, animationSpec = tween(1400, easing = FastOutSlowInEasing)) }
+    val anim = remember(animationKey, segments) { Animatable(0f) }
+    LaunchedEffect(animationKey, segments) { anim.animateTo(1f, animationSpec = tween(1400, easing = FastOutSlowInEasing)) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().height(height)) {
