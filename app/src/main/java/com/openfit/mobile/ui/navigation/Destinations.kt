@@ -32,7 +32,7 @@ sealed class Destination(val route: String, val label: String, val icon: ImageVe
 
     companion object {
         val bottomBarItems: List<Destination>
-            get() = listOf(Today, Calendar, Metrics, Devices, Coach, Settings)
+            get() = listOf(Today, Metrics, Devices, Coach, Settings)
     }
 }
 

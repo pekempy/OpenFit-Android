@@ -1,7 +1,7 @@
 package com.openfit.mobile.ui.charts
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
@@ -10,9 +10,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,13 +33,13 @@ fun RingProgress(
     centerText: String? = null,
     centerSubText: String? = null,
 ) {
-    var trigger by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { trigger = true }
-    val animProg by animateFloatAsState(
-        targetValue = if (trigger) progress.coerceIn(0f, 1f) else 0f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "ringProgress"
-    )
+    val animProg = remember(progress) { Animatable(0f) }
+    LaunchedEffect(progress) {
+        animProg.animateTo(
+            progress.coerceIn(0f, 1f),
+            animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        )
+    }
 
     Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(size)) {
@@ -60,7 +57,7 @@ fun RingProgress(
             drawArc(
                 color = color,
                 startAngle = -90f,
-                sweepAngle = 360f * animProg,
+                sweepAngle = 360f * animProg.value,
                 useCenter = false,
                 style = stroke,
                 topLeft = androidx.compose.ui.geometry.Offset(inset, inset),

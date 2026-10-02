@@ -1,7 +1,7 @@
 package com.openfit.mobile.ui.charts
 
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
@@ -15,10 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -77,15 +74,8 @@ fun SleepHypnogramChart(
     val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
     val connectorColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
-    var trigger by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        trigger = true
-    }
-    val anim by animateFloatAsState(
-        targetValue = if (trigger) 1f else 0f,
-        animationSpec = tween(900, easing = FastOutSlowInEasing),
-        label = "hypnoAnim"
-    )
+    val anim = remember(segments) { Animatable(0f) }
+    LaunchedEffect(segments) { anim.animateTo(1f, animationSpec = tween(1400, easing = FastOutSlowInEasing)) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().height(height)) {
@@ -123,7 +113,7 @@ fun SleepHypnogramChart(
                     return (idx + 0.5f) * rowHeight
                 }
 
-                val revealEpoch = startEpoch + (totalDuration * anim).toLong()
+                val revealEpoch = startEpoch + (totalDuration * anim.value).toLong()
 
                 // Gridlines for each stage level
                 stageKeys.indices.forEach { i ->

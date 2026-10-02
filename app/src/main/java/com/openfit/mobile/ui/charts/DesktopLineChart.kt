@@ -11,11 +11,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -128,13 +127,8 @@ fun DesktopLineChart(
         val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
         val targetColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
 
-        val trigger = remember { mutableStateOf(false) }
-        LaunchedEffect(Unit) { trigger.value = true }
-        val anim = animateFloatAsState(
-            targetValue = if (trigger.value) 1f else 0f,
-            animationSpec = tween(800, easing = FastOutSlowInEasing),
-            label = "lineAnim"
-        )
+        val anim = remember(values) { Animatable(0f) }
+        LaunchedEffect(values) { anim.animateTo(1f, animationSpec = tween(1200, easing = FastOutSlowInEasing)) }
 
         Canvas(
             modifier = Modifier

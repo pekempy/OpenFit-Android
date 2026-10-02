@@ -3,14 +3,11 @@ package com.openfit.mobile.ui.charts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -34,9 +31,8 @@ fun SegmentedBar(
     cornerRadius: Dp = 5.dp,
 ) {
     val total = segments.sumOf { it.first.toDouble() }.toFloat()
-    var trigger by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { trigger = true }
-    val anim by animateFloatAsState(if (trigger) 1f else 0f, tween(550, easing = FastOutSlowInEasing), label = "segAnim")
+    val anim = remember(segments) { Animatable(0f) }
+    LaunchedEffect(segments) { anim.animateTo(1f, animationSpec = tween(850, easing = FastOutSlowInEasing)) }
     Canvas(modifier = modifier.fillMaxWidth().height(height)) {
         if (total <= 0f) return@Canvas
         val radiusPx = cornerRadius.toPx()
@@ -47,7 +43,7 @@ fun SegmentedBar(
             var x = 0f
             for ((value, color) in segments) {
                 if (value <= 0f) continue
-                val width = size.width * (value / total) * anim
+                val width = size.width * (value / total) * anim.value
                 drawRect(color = color, topLeft = Offset(x, 0f), size = Size(width, size.height))
                 x += width
             }

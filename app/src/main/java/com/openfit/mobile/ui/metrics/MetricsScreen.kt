@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MonitorWeight
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -19,6 +20,7 @@ import com.openfit.mobile.AppContainer
 import com.openfit.mobile.ui.activity.ActivityScreen
 import com.openfit.mobile.ui.body.BodyScreen
 import com.openfit.mobile.ui.health.HealthScreen
+import com.openfit.mobile.ui.calendar.CalendarScreen
 import com.openfit.mobile.ui.sleep.SleepScreen
 import com.openfit.mobile.ui.today.TodayUiState
 import kotlinx.coroutines.launch
@@ -28,6 +30,7 @@ enum class MetricSubTab(val title: String, val icon: ImageVector) {
     SLEEP("Sleep", Icons.Filled.Bedtime),
     VITALS("Vitals", Icons.Filled.Favorite),
     BODY("Body", Icons.Filled.MonitorWeight),
+    HISTORY("History", Icons.Filled.CalendarMonth),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,6 +90,7 @@ fun MetricsScreen(
                         MetricSubTab.SLEEP    -> SleepScreen(container, state, onRefresh)
                         MetricSubTab.VITALS   -> HealthScreen(container, state, onRefresh)
                         MetricSubTab.BODY     -> BodyScreen(container, state, onRefresh)
+                        MetricSubTab.HISTORY  -> CalendarScreen(container = container)
                     }
                 }
             }

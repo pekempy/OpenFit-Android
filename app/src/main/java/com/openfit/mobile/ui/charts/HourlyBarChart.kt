@@ -8,14 +8,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.RoundRect
@@ -34,9 +31,8 @@ fun HourlyBarChart(
     modifier: Modifier = Modifier,
 ) {
     val max = (values.maxOrNull() ?: 0).coerceAtLeast(1)
-    var trigger by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { trigger = true }
-    val anim by animateFloatAsState(if (trigger) 1f else 0f, tween(650, easing = FastOutSlowInEasing), label = "hourlyAnim")
+    val anim = remember(values) { Animatable(0f) }
+    LaunchedEffect(values) { anim.animateTo(1f, animationSpec = tween(1000, easing = FastOutSlowInEasing)) }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
@@ -45,7 +41,7 @@ fun HourlyBarChart(
             val barWidth = (size.width - gap * (barCount - 1)) / barCount
             values.forEachIndexed { index, value ->
                 val fraction = value.toFloat() / max.toFloat()
-                val barHeight = size.height * fraction * anim
+                val barHeight = size.height * fraction * anim.value
                 val left = index * (barWidth + gap)
                 val top = size.height - barHeight
                 if (barHeight > 0f) {

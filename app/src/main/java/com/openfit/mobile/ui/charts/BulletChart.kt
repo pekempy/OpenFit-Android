@@ -15,12 +15,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,9 +45,8 @@ fun BulletChart(
     val safeMax = max(max, max(value, target ?: 0.0)).coerceAtLeast(1.0)
     val valuePercent = (value / safeMax).toFloat().coerceIn(0f, 1f)
     val targetPercent = target?.let { (it / safeMax).toFloat().coerceIn(0f, 1f) }
-    var trigger by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { trigger = true }
-    val animPercent by animateFloatAsState(if (trigger) valuePercent else 0f, tween(600, easing = FastOutSlowInEasing), label = "bulletAnim")
+    val animPercent = remember(value) { Animatable(0f) }
+    LaunchedEffect(value) { animPercent.animateTo(valuePercent, animationSpec = tween(900, easing = FastOutSlowInEasing)) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(
@@ -64,7 +60,7 @@ fun BulletChart(
             // Value fill
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(animPercent)
+                    .fillMaxWidth(animPercent.value)
                     .height(10.dp)
                     .clip(RoundedCornerShape(5.dp))
                     .background(color)
