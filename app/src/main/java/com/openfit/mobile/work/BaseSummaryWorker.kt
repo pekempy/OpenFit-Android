@@ -47,7 +47,7 @@ abstract class BaseSummaryWorker(context: Context, params: WorkerParameters) : C
                     // Open the app and re-trigger the permission grant from there.
                     notify(container, notificationTitle(),
                         "OpenFit needs background Health Connect access to generate your summary. Tap to grant it in the app.")
-                    return@try Result.failure()
+                    return Result.failure()
                 }
                 // Use whichever data source the user configured (Health Connect
                 // or Google Health API) — not the raw cloud HealthRepository.
