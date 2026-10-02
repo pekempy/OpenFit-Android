@@ -2,18 +2,23 @@ package com.openfit.mobile.data.oauth
 
 import kotlinx.serialization.Serializable
 
-/** Same OAuth flow OpenFit's desktop app uses (Google Health API v4,
- * read-only scopes), but the client is user-configurable in Settings
- * rather than baked into the app.
+/** OAuth configuration for the Google Health API v4 cloud path.
  *
- * Recommended setup mirrors OpenFit's own docs: create a Google Cloud
- * project, enable the Google Health API, and add an OAuth client. For
- * Android specifically, use an "Android" application-type client (package
- * name com.openfit.mobile + your debug/release signing SHA-1) - it has no
- * client secret, matching how AppAuth's PKCE flow authenticates. A
- * Web-application client with a secret also works if that's what you
- * already created for OpenFit desktop; clientSecret is optional here for
- * exactly that reason.
+ * Two supported client types — configure in Google Cloud Console:
+ *
+ * Android client (no secret):
+ *   - Application type: Android
+ *   - Package name: com.openfit.mobile
+ *   - SHA-1 fingerprint: your debug/release signing certificate
+ *   - Must also add com.openfit.mobile:/oauth/callback as an Authorised
+ *     Redirect URI (Credentials → edit the client)
+ *
+ * Web application client (with secret):
+ *   - Application type: Web application
+ *   - Add Authorised Redirect URI: com.openfit.mobile:/oauth/callback
+ *   - Enter both Client ID and Client Secret in the app settings
+ *
+ * The Web application path is identical to OpenFit desktop's OAuth config.
  */
 @Serializable
 data class OAuthConfig(

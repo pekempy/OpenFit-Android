@@ -711,8 +711,51 @@ private fun ConnectionsSettingsSection(
             }
 
             var showAdvanced by remember { mutableStateOf(false) }
-            TextButton(onClick = { showAdvanced = !showAdvanced }) {
+            var authError by remember { mutableStateOf<String?>(null) }
+
+            TextButton(onClick = { showAdvanced = !showAdvanced; authError = null }) {
                 Text(if (showAdvanced) "Hide OAuth Client Setup" else "Configure OAuth Client ID / Secret")
+            }
+
+            // Show auth error if token exchange failed
+            authError?.let { err ->
+                androidx.compose.material3.Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Authentication failed",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Text(
+                            err,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        if (err.contains("invalid_client", ignoreCase = true) ||
+                            err.contains("client secret", ignoreCase = true)) {
+                            Text(
+                                "→ Web application clients require a Client Secret. " +
+                                "Enter it in the field below, or switch to an Android-type client (no secret needed).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                        if (err.contains("redirect_uri_mismatch", ignoreCase = true)) {
+                            Text(
+                                "→ The redirect URI com.openfit.mobile:/oauth/callback must be " +
+                                "added as an Authorised Redirect URI in your Google Cloud Console " +
+                                "OAuth client settings.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                    }
+                }
             }
 
             if (showAdvanced) {
@@ -720,15 +763,34 @@ private fun ConnectionsSettingsSection(
                     config = settings.oauthConfig,
                     onSave = { updated ->
                         scope.launch {
+                            authError = null
                             container.settingsRepository.updateOAuthConfig(updated)
                             if (updated.isConfigured) {
-                                val intent = runCatching { container.authManager.createAuthorizationIntent(updated) }.getOrNull() ?: return@launch
+                                val intent = runCatching {
+                                    container.authManager.createAuthorizationIntent(updated)
+                                }.getOrElse { e ->
+                                    authError = e.message ?: "Failed to build auth request"
+                                    return@launch
+                                }
                                 launchAuthIntent(intent) { resultIntent ->
                                     scope.launch {
-                                        if (resultIntent != null) {
-                                            runCatching { container.authManager.handleAuthorizationResponse(resultIntent, updated) }
-                                            container.settingsRepository.setDataSourceKind(HealthDataSourceKind.GOOGLE_HEALTH_API)
+                                        if (resultIntent == null) {
+                                            authError = "Sign-in was cancelled or the browser returned no result."
+                                            return@launch
+                                        }
+                                        val result = runCatching {
+                                            container.authManager.handleAuthorizationResponse(resultIntent, updated)
+                                        }
+                                        if (result.isSuccess) {
+                                            // Token saved — now switch data source
+                                            container.settingsRepository.setDataSourceKind(
+                                                HealthDataSourceKind.GOOGLE_HEALTH_API
+                                            )
                                             onDataSourceChanged()
+                                            authError = null
+                                        } else {
+                                            authError = result.exceptionOrNull()?.message
+                                                ?: "Token exchange failed — check your client ID and secret."
                                         }
                                     }
                                 }
@@ -1670,12 +1732,84 @@ private fun SummaryScheduleRow(
 
 @Composable
 private fun OAuthEditor(config: OAuthConfig, onSave: (OAuthConfig) -> Unit) {
-    var clientId by remember { mutableStateOf(config.clientId) }
+    var clientId     by remember { mutableStateOf(config.clientId) }
     var clientSecret by remember { mutableStateOf(config.clientSecret) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(value = clientId, onValueChange = { clientId = it }, label = { Text("Client ID") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = clientSecret, onValueChange = { clientSecret = it }, label = { Text("Client Secret (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        Button(onClick = { onSave(OAuthConfig(clientId = clientId.trim(), clientSecret = clientSecret.trim())) }, modifier = Modifier.fillMaxWidth()) {
+
+    // Derive the redirect URI the user must register in Cloud Console
+    val redirectUri = config.copy(
+        clientId = clientId.trim(), clientSecret = clientSecret.trim()
+    ).redirectUri
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // ── Setup instructions ───────────────────────────────────────────
+        androidx.compose.material3.Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "Google Cloud Console setup",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                )
+                Text(
+                    "1. Create a project and enable the Google Health API.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "2. APIs & Services → Credentials → Create OAuth 2.0 Client ID.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    "3. Choose application type:\n" +
+                    "   • Android — package com.openfit.mobile + your SHA-1. No secret needed.\n" +
+                    "     Also add the redirect URI below under \"Authorised redirect URIs\".\n" +
+                    "   • Web application — enter client ID AND secret below. Register the redirect URI.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                Text(
+                    "Redirect URI to register:",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                )
+                androidx.compose.foundation.text.selection.SelectionContainer {
+                    Text(
+                        "com.openfit.mobile:/oauth/callback",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        }
+
+        // ── Fields ────────────────────────────────────────────────────────
+        OutlinedTextField(
+            value = clientId,
+            onValueChange = { clientId = it },
+            label = { Text("Client ID") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        OutlinedTextField(
+            value = clientSecret,
+            onValueChange = { clientSecret = it },
+            label = { Text("Client Secret (Web app clients only — leave blank for Android client)") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Button(
+            onClick = {
+                onSave(OAuthConfig(clientId = clientId.trim(), clientSecret = clientSecret.trim()))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = clientId.isNotBlank(),
+        ) {
             Text("Save & connect")
         }
     }
