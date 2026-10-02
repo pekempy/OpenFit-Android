@@ -25,11 +25,44 @@ class NotificationHelper(private val context: Context) {
                 description = "A daily AI summary of your activity, delivered each evening."
             },
         )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_HYDRATION, "Hydration reminders", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Periodic prompts to drink water throughout the day."
+            },
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(CHANNEL_MOVE, "Move reminders", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Hourly nudge to stand up and move when you've been sedentary."
+            },
+        )
     }
 
     fun showMorningSummary(title: String, body: String) = show(NOTIFICATION_ID_MORNING, CHANNEL_MORNING, title, body)
-
     fun showEveningSummary(title: String, body: String) = show(NOTIFICATION_ID_EVENING, CHANNEL_EVENING, title, body)
+
+    fun showHydrationReminder() {
+        val messages = listOf(
+            "💧 Time for a glass of water! Staying hydrated keeps energy and focus sharp.",
+            "💧 Quick water break — even mild dehydration affects mood and performance.",
+            "💧 Hydration check! A glass of water helps your heart, joints, and concentration.",
+            "💧 Water time! Regular small sips make hitting your daily goal easy.",
+            "💧 Don't forget to drink — consistent hydration improves recovery and sleep quality.",
+            "💧 Sip reminder — staying on top of hydration now means better recovery tonight.",
+        )
+        val body = messages[(System.currentTimeMillis() / 1000 % messages.size).toInt()]
+        show(NOTIFICATION_ID_HYDRATION, CHANNEL_HYDRATION, "Drink some water 💧", body)
+    }
+
+    fun showMoveReminder() {
+        val messages = listOf(
+            "🚶 You've been sitting a while — stand up and stretch for a few minutes.",
+            "🚶 Time to move! A short walk improves circulation and clears your head.",
+            "🚶 Activity nudge — even 2 minutes of movement counts toward your daily goal.",
+            "🚶 Stand up and take a quick walk. Your body (and posture) will thank you.",
+        )
+        val body = messages[(System.currentTimeMillis() / 1000 % messages.size).toInt()]
+        show(NOTIFICATION_ID_MOVE, CHANNEL_MOVE, "Time to move 🚶", body)
+    }
 
     private fun show(id: Int, channel: String, title: String, body: String) {
         val openIntent = Intent(context, MainActivity::class.java).apply {
@@ -60,11 +93,15 @@ class NotificationHelper(private val context: Context) {
     }
 
     companion object {
-        const val EXTRA_NAVIGATE_TO = "navigate_to"
-        const val NAVIGATE_TO_COACH = "coach"
-        private const val CHANNEL_MORNING = "morning_sleep_summary"
-        private const val CHANNEL_EVENING = "evening_activity_summary"
-        private const val NOTIFICATION_ID_MORNING = 1001
-        private const val NOTIFICATION_ID_EVENING = 1002
+        const val EXTRA_NAVIGATE_TO  = "navigate_to"
+        const val NAVIGATE_TO_COACH  = "coach"
+        private const val CHANNEL_MORNING   = "morning_sleep_summary"
+        private const val CHANNEL_EVENING   = "evening_activity_summary"
+        private const val CHANNEL_HYDRATION = "hydration_reminder"
+        private const val CHANNEL_MOVE      = "move_reminder"
+        private const val NOTIFICATION_ID_MORNING   = 1001
+        private const val NOTIFICATION_ID_EVENING   = 1002
+        private const val NOTIFICATION_ID_HYDRATION = 1003
+        private const val NOTIFICATION_ID_MOVE      = 1004
     }
 }

@@ -12,30 +12,47 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
-/** Some OEMs (aggressive battery managers on certain Android skins) clear
- * WorkManager's persisted alarms across a reboot even though WorkManager is
- * supposed to survive it on its own; re-enqueuing both summary jobs here is
- * a cheap belt-and-braces fix. */
+/** Re-queues all WorkManager jobs after a device reboot so OEM battery
+  * managers that clear WorkManager alarms don't silently kill daily reminders. */
 class BootRescheduleReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val container = (context.applicationContext as OpenFitApplication).container
         CoroutineScope(Dispatchers.IO).launch {
-            val settings = container.settingsRepository.settingsFlow.first()
-            if (settings.morningSleepSummary.enabled) {
+            val settings  = container.settingsRepository.settingsFlow.first()
+            val reminders = settings.reminders
+
+            // Morning / evening AI summaries
+            if (reminders.morningSleepSummary.enabled) {
                 WorkScheduler.rescheduleNext(
                     context, WorkScheduler.MORNING_WORK_NAME,
-                    settings.morningSleepSummary.hour, settings.morningSleepSummary.minute,
+                    reminders.morningSleepSummary.hour, reminders.morningSleepSummary.minute,
                     MorningSummaryWorker::class.java,
                 )
             }
-            if (settings.eveningActivitySummary.enabled) {
+            if (reminders.eveningActivitySummary.enabled) {
                 WorkScheduler.rescheduleNext(
                     context, WorkScheduler.EVENING_WORK_NAME,
-                    settings.eveningActivitySummary.hour, settings.eveningActivitySummary.minute,
+                    reminders.eveningActivitySummary.hour, reminders.eveningActivitySummary.minute,
                     EveningSummaryWorker::class.java,
                 )
             }
+
+            // Hydration reminder
+            WorkScheduler.scheduleHydrationReminder(
+                context      = context,
+                enabled      = reminders.hydrationReminder,
+                morningHour  = reminders.morningSleepSummary.hour,
+                morningMinute = reminders.morningSleepSummary.minute,
+            )
+
+            // Move / stand-up reminder
+            WorkScheduler.scheduleMoveReminder(
+                context      = context,
+                enabled      = reminders.moveReminder,
+                morningHour  = reminders.morningSleepSummary.hour,
+                morningMinute = reminders.morningSleepSummary.minute,
+            )
         }
     }
 }

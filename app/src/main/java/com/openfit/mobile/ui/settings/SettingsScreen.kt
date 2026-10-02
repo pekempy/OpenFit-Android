@@ -143,6 +143,18 @@ fun SettingsScreen(
                                 container.settingsRepository.updateReminders(updated)
                                 WorkScheduler.scheduleMorningSummary(container, updated.morningSleepSummary)
                                 WorkScheduler.scheduleEveningSummary(container, updated.eveningActivitySummary)
+                                WorkScheduler.scheduleHydrationReminder(
+                                    context       = container.appContext,
+                                    enabled       = updated.hydrationReminder,
+                                    morningHour   = updated.morningSleepSummary.hour,
+                                    morningMinute = updated.morningSleepSummary.minute,
+                                )
+                                WorkScheduler.scheduleMoveReminder(
+                                    context       = container.appContext,
+                                    enabled       = updated.moveReminder,
+                                    morningHour   = updated.morningSleepSummary.hour,
+                                    morningMinute = updated.morningSleepSummary.minute,
+                                )
                             }
                         },
                     )

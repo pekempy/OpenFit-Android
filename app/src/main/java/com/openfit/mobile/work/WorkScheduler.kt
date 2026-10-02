@@ -16,8 +16,10 @@ import java.util.concurrent.TimeUnit
  * each run is a OneTimeWorkRequest that reschedules its own next occurrence
  * on completion (see BaseSummaryWorker.rescheduleNext()). */
 object WorkScheduler {
-    const val MORNING_WORK_NAME = "morning_sleep_summary"
-    const val EVENING_WORK_NAME = "evening_activity_summary"
+    const val MORNING_WORK_NAME   = "morning_sleep_summary"
+    const val EVENING_WORK_NAME   = "evening_activity_summary"
+    const val HYDRATION_WORK_NAME = "hydration_reminder"
+    const val MOVE_WORK_NAME      = "move_reminder"
 
     fun scheduleMorningSummary(container: AppContainer, schedule: SummarySchedule) =
         schedule(container.appContext, MORNING_WORK_NAME, schedule, MorningSummaryWorker::class.java)
@@ -54,4 +56,46 @@ object WorkScheduler {
         if (forceNextOccurrence || !target.isAfter(now)) target = target.plusDays(1)
         return Duration.between(now, target).toMillis().coerceAtLeast(0L)
     }
+
+    // ── Hydration reminder ────────────────────────────────────────────────
+
+    /**
+     * Schedules the first hydration reminder at the next window-start time
+     * (morning summary hour) when [enabled], or cancels the chain when false.
+     * Subsequent occurrences are self-rescheduled by [HydrationReminderWorker].
+     */
+    fun scheduleHydrationReminder(
+        context: Context,
+        enabled: Boolean,
+        morningHour: Int,
+        morningMinute: Int,
+    ) {
+        val wm = WorkManager.getInstance(context)
+        if (!enabled) { wm.cancelUniqueWork(HYDRATION_WORK_NAME); return }
+        // First fire at the next window-start (today if still future, else tomorrow)
+        val delayMs = computeInitialDelayMillis(morningHour, morningMinute)
+        enqueue(context, HYDRATION_WORK_NAME, HydrationReminderWorker::class.java, delayMs)
+    }
+
+    /** Called by [HydrationReminderWorker] to chain the next occurrence. */
+    fun enqueueHydrationReminder(context: Context, delayMs: Long) =
+        enqueue(context, HYDRATION_WORK_NAME, HydrationReminderWorker::class.java, delayMs)
+
+    // ── Move / stand-up reminder ──────────────────────────────────────────
+
+    fun scheduleMoveReminder(
+        context: Context,
+        enabled: Boolean,
+        morningHour: Int,
+        morningMinute: Int,
+    ) {
+        val wm = WorkManager.getInstance(context)
+        if (!enabled) { wm.cancelUniqueWork(MOVE_WORK_NAME); return }
+        val delayMs = computeInitialDelayMillis(morningHour, morningMinute)
+        enqueue(context, MOVE_WORK_NAME, MoveReminderWorker::class.java, delayMs)
+    }
+
+    /** Called by [MoveReminderWorker] to chain the next occurrence. */
+    fun enqueueMoveReminder(context: Context, delayMs: Long) =
+        enqueue(context, MOVE_WORK_NAME, MoveReminderWorker::class.java, delayMs)
 }
