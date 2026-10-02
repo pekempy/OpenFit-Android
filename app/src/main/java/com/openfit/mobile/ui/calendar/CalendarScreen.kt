@@ -130,10 +130,14 @@ fun CalendarScreen(container: AppContainer) {
     val dayDetail     by vm.dayDetail.collectAsState()
     val viewMode      by vm.viewMode.collectAsState()
     val settings      by container.settingsRepository.settingsFlow.collectAsState(initial = null)
+    val isBackfilling by vm.isBackfilling.collectAsState()
 
     val today     = remember { LocalDate.now() }
     val thisMonth = remember { YearMonth.now() }
     val scope     = rememberCoroutineScope()
+
+    // Dismiss banner once backfill has actually loaded enough history
+    var showDataLimitBanner by remember { mutableStateOf(true) }
 
     // ── Pagers ───────────────────────────────────────────────────────────────
     // 120 months back (10 years) as page 0; current month = page 119.
@@ -235,12 +239,26 @@ fun CalendarScreen(container: AppContainer) {
         // Day-of-week header (Mon … Sun)
         DayOfWeekLabels()
 
+        // Data limit banner: shown when HC history is short OR while backfill is active
+        val dataAvailableSince = (calendarState as? CalendarUiState.Ready)?.dataAvailableSince
+        if (showDataLimitBanner && (dataAvailableSince != null || isBackfilling)) {
+            DataLimitBanner(
+                dataAvailableSince = dataAvailableSince ?: LocalDate.now(),
+                isBackfilling      = isBackfilling,
+                onDismiss          = { showDataLimitBanner = false },
+            )
+        }
+
         // Thin progress stripe while a background month fetch runs
+        // Progress stripe: shown while a foreground month fetch OR background backfill runs
         val isLoadingMonth = calendarState.let { it is CalendarUiState.Ready && it.isLoadingMonth }
-        AnimatedVisibility(visible = isLoadingMonth) {
+        AnimatedVisibility(visible = isLoadingMonth || isBackfilling) {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().height(2.dp),
-                color    = MaterialTheme.colorScheme.primary,
+                color    = if (isBackfilling && !isLoadingMonth)
+                               MaterialTheme.colorScheme.secondary
+                           else
+                               MaterialTheme.colorScheme.primary,
             )
         }
 
@@ -257,11 +275,12 @@ fun CalendarScreen(container: AppContainer) {
                     modifier = Modifier.fillMaxWidth(),
                 ) { page ->
                     MonthGrid(
-                        month         = pageToMonth(page),
-                        today         = today,
-                        selectedDate  = selectedDate,
-                        calendarState = calendarState,
-                        onDaySelect   = { vm.selectDate(it) },
+                        month              = pageToMonth(page),
+                        today              = today,
+                        selectedDate       = selectedDate,
+                        calendarState      = calendarState,
+                        onDaySelect        = { vm.selectDate(it) },
+                        dataAvailableSince = (calendarState as? CalendarUiState.Ready)?.dataAvailableSince,
                     )
                 }
 
@@ -412,6 +431,67 @@ private fun LegendDot(color: Color, label: String) {
     }
 }
 
+/** Shown when Health Connect history is shorter than 2 years, to explain
+ *  why older calendar months have no data and how to access full history. */
+@Composable
+private fun DataLimitBanner(
+    dataAvailableSince: LocalDate,
+    isBackfilling: Boolean,
+    onDismiss: () -> Unit,
+) {
+    val formatter = remember { java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy") }
+    val monthsOfData = remember(dataAvailableSince) {
+        ChronoUnit.MONTHS.between(dataAvailableSince, LocalDate.now()).toInt()
+    }
+    // Only show if HC has less than 18 months of data.
+    if (monthsOfData >= 18) return
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = if (isBackfilling)
+                        "⏳ Loading full history in the background…"
+                    else
+                        "📅 Health Connect data from ${dataAvailableSince.format(formatter)}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = if (isBackfilling)
+                        "Calendar dots fill in automatically. Keep the app open for faster backfill."
+                    else
+                        "Older data lives in Google Fit. Enable Google Health API in Settings → Data Source for full history.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                )
+            }
+            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    Icons.Filled.KeyboardArrowRight,
+                    contentDescription = "Dismiss",
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Day-of-week label row
 // ═════════════════════════════════════════════════════════════════════════════
@@ -454,9 +534,39 @@ private fun MonthGrid(
     selectedDate: LocalDate?,
     calendarState: CalendarUiState,
     onDaySelect: (LocalDate) -> Unit,
+    dataAvailableSince: LocalDate? = null,
 ) {
     val indicators  = (calendarState as? CalendarUiState.Ready)?.indicators ?: emptyMap()
     val isFirstLoad = calendarState is CalendarUiState.Loading
+
+    // Month is definitively before Health Connect's data range — show empty state.
+    val isBeforeHcRange = dataAvailableSince != null &&
+        month.atEndOfMonth() < dataAvailableSince
+    if (isBeforeHcRange) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = "No Health Connect data",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "HC history starts ${dataAvailableSince!!.format(java.time.format.DateTimeFormatter.ofPattern("MMM yyyy"))}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                )
+            }
+        }
+        return
+    }
 
     // Monday-based offset for the 1st of month (Mon = 0 … Sun = 6)
     val firstDow    = month.atDay(1).dayOfWeek.value - 1

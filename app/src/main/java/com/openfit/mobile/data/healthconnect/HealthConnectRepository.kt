@@ -964,6 +964,35 @@ class HealthConnectRepository(
         Log.e(TAG, "Failed to insert nutrition record: ${e.message}")
         false
     }
+
+    /** Returns the earliest date for which Health Connect has any Steps or
+     *  Sleep data. Used by the calendar to avoid querying months that HC
+     *  definitively doesn't have data for, and to surface an informational
+     *  banner when the HC history is shorter than the user's full history
+     *  in Google Fit / Google Health. Returns null on permission error. */
+    suspend fun getEarliestDataDate(): LocalDate? = runCatching {
+        val client = HealthConnectManager.client(context)
+        // Fetch ascending (oldest first), 1 record each — very fast.
+        val stepsDate = client.readRecords(
+            ReadRecordsRequest(
+                recordType = StepsRecord::class,
+                timeRangeFilter = TimeRangeFilter.after(Instant.EPOCH),
+                ascendingOrder = true,
+                pageSize = 1,
+            )
+        ).records.firstOrNull()?.startTime?.atZone(zone)?.toLocalDate()
+
+        val sleepDate = client.readRecords(
+            ReadRecordsRequest(
+                recordType = SleepSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.after(Instant.EPOCH),
+                ascendingOrder = true,
+                pageSize = 1,
+            )
+        ).records.firstOrNull()?.startTime?.atZone(zone)?.toLocalDate()
+
+        listOfNotNull(stepsDate, sleepDate).minOrNull()
+    }.getOrNull()
 }
 
 private suspend inline fun <reified T : Record> readAllRecords(

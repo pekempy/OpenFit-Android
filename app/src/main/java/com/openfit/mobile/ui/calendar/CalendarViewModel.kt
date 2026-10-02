@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.YearMonth
@@ -43,6 +46,7 @@ sealed interface CalendarUiState {
     data class Ready(
         val indicators: Map<String, DayIndicators>,
         val isLoadingMonth: Boolean = false,
+        val dataAvailableSince: LocalDate? = null,
     ) : CalendarUiState
     data class Error(val message: String) : CalendarUiState
 }
@@ -85,6 +89,15 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
      *  Past months are never re-fetched; current month is always refreshed. */
     private val loadedMonths = mutableSetOf<YearMonth>()
 
+    /** Earliest date Health Connect actually has data for (null = unknown / Google Health API path). */
+    private var dataAvailableSince: LocalDate? = null
+
+    private var backfillJob: Job? = null
+    private val _isBackfilling = MutableStateFlow(false)
+    /** True while the background historical fetch is walking backwards through HC data. */
+    val isBackfilling: StateFlow<Boolean> = _isBackfilling.asStateFlow()
+
+
     init {
         viewModelScope.launch {
             // 1. Restore persisted indicators from disk (instant, no HC call).
@@ -94,8 +107,16 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
             //    last 14 days for free without any additional Health Connect query.
             withContext(Dispatchers.IO) { seedFromBundleCache() }
 
-            // 3. Fetch current month fresh (today's data changes).
+            // 3. Probe HC for its earliest available date so we know which
+            //    months to skip and can show an informational banner to the user.
+            withContext(Dispatchers.IO) { probeEarliestDate() }
+
+            // 4. Fetch current month fresh (today's data changes).
             loadMonth(YearMonth.now())
+
+            // 5. Walk backwards through all available HC history in the background.
+            //    Each 14-day window is fetched with a 1.5 s delay to be gentle on HC.
+            startHistoricalBackfill()
         }
     }
 
@@ -104,6 +125,14 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
     fun loadMonth(month: YearMonth) {
         viewModelScope.launch {
             val thisMonth = YearMonth.now()
+
+            // Don't attempt to fetch months that pre-date HC's earliest record.
+            dataAvailableSince?.let { earliest ->
+                if (month < YearMonth.from(earliest)) {
+                    rebuildIndicators(isLoading = false)
+                    return@launch
+                }
+            }
 
             // Past months that are already in the disk-backed set are done.
             if (month < thisMonth && loadedMonths.contains(month)) {
@@ -265,6 +294,7 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
         _calendarState.value = CalendarUiState.Ready(
             indicators = snapshot,
             isLoadingMonth = isLoading,
+            dataAvailableSince = dataAvailableSince,
         )
     }
 
@@ -312,5 +342,96 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
         }
         val monthsCopy = loadedMonths.map { it.toString() }.toSet()
         CalendarCache.save(container.appContext, daysCopy, monthsCopy)
+    }
+
+    private suspend fun probeEarliestDate() {
+        val settings = container.settingsRepository.settingsFlow.first()
+        // Only meaningful for Health Connect; Google Health API has full history.
+        if (settings.dataSourceKind != com.openfit.mobile.data.settings.HealthDataSourceKind.HEALTH_CONNECT) return
+        dataAvailableSince = container.healthConnectRepository.getEarliestDataDate()
+    }
+
+    /**
+     * Walks backwards through Health Connect data in 14-day windows with a
+     * 1.5-second delay between each fetch. Stops when:
+     *  - 3 consecutive windows return zero data (HC has no more history)
+     *  - We've reached [dataAvailableSince] (we know where HC starts)
+     *  - We've gone back 10 years (hard ceiling)
+     * Updates the calendar dots progressively as each window loads.
+     */
+    private fun startHistoricalBackfill() {
+        backfillJob?.cancel()
+        backfillJob = viewModelScope.launch(Dispatchers.IO) {
+            val settings = container.settingsRepository.settingsFlow.first()
+            val source = container.activeHealthDataSource(settings.dataSourceKind)
+            if (!source.isConnected()) return@launch
+
+            _isBackfilling.value = true
+            try {
+                val today = LocalDate.now()
+                // The current month's 14-day window is already loaded by loadMonth(now).
+                // Begin backfill from the window immediately before it.
+                var anchor = today.minusDays(14)
+                var consecutiveEmpty = 0
+                val hardStop  = today.minusYears(10)
+                // If we know HC's earliest record, stop just before it (nothing older exists).
+                val softStop  = dataAvailableSince?.minusDays(1)
+
+                while (isActive && anchor > hardStop && consecutiveEmpty < 3) {
+                    // Honour the known HC data boundary.
+                    if (softStop != null && anchor < softStop) break
+
+                    // Skip windows already fully covered by the indicator cache.
+                    val alreadyCached = synchronized(indicatorCache) {
+                        (0..13).any { d ->
+                            indicatorCache[anchor.minusDays(d.toLong()).toString()]?.hasAny == true
+                        }
+                    }
+
+                    if (alreadyCached) {
+                        consecutiveEmpty = 0 // existing data resets the empty streak
+                    } else {
+                        val hasNewData = runCatching {
+                            val bundle = source.sync(anchor.toString())
+                            val days = bundle.trend + bundle.today
+                            val any = days.any { snap ->
+                                (snap.steps ?: 0) > 0 ||
+                                snap.sleep != null ||
+                                snap.restingHeartRateBpm != null ||
+                                snap.heartRateAvgBpm != null
+                            }
+                            if (any) {
+                                synchronized(snapshotCache) {
+                                    bundle.trend.forEach { snapshotCache[it.date] = it }
+                                    snapshotCache[bundle.today.date] = bundle.today
+                                }
+                                synchronized(indicatorCache) {
+                                    days.forEach { snap ->
+                                        indicatorCache[snap.date] = DayIndicators(
+                                            hasSteps = (snap.steps ?: 0) > 0,
+                                            hasSleep = snap.sleep != null && snap.sleep.totalMinutes > 0,
+                                            hasHR    = snap.restingHeartRateBpm != null || snap.heartRateAvgBpm != null,
+                                        )
+                                    }
+                                }
+                                rebuildIndicators(isLoading = true)
+                                // Persist to disk every ~4 weeks
+                                if (anchor.dayOfMonth <= 14) persistDiskCache()
+                            }
+                            any
+                        }.getOrElse { false }
+
+                        if (hasNewData) consecutiveEmpty = 0 else consecutiveEmpty++
+                    }
+
+                    anchor = anchor.minusDays(14)
+                    delay(1_500) // gentle — 1.5 s between 14-day HC reads
+                }
+            } finally {
+                rebuildIndicators(isLoading = false)
+                persistDiskCache()
+                _isBackfilling.value = false
+            }
+        }
     }
 }
