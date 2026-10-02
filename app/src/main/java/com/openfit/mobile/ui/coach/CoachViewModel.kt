@@ -32,6 +32,13 @@ class CoachViewModel(
     private val _uiState = MutableStateFlow(CoachUiState())
     val uiState: StateFlow<CoachUiState> = _uiState.asStateFlow()
 
+    // Mutable so CoachScreen can push the latest bundle whenever TodayViewModel
+    // delivers a fresh sync — the ViewModel is created once (scoped to the
+    // NavBackStackEntry) but the health data may arrive after creation.
+    @Volatile private var latestBundle: HealthSnapshotBundle? = healthBundle
+
+    fun updateBundle(bundle: HealthSnapshotBundle?) { latestBundle = bundle }
+
     init {
         // Load the last AI-generated summary (morning or evening) so it shows
         // immediately when the user opens Coach from the notification tap,
@@ -63,7 +70,7 @@ class CoachViewModel(
                     ?: throw IllegalStateException("No AI provider is selected in Settings.")
                 val provider = AiProviderFactory.forKind(config.kind)
                 val userName = com.openfit.mobile.data.ai.PersonaPrompt.userName(settings.personalisation)
-                val systemPrompt = buildSystemPrompt(healthBundle, settings.personalisation, settings.goals)
+                val systemPrompt = buildSystemPrompt(latestBundle, settings.personalisation, settings.goals)
                 val transcriptPrompt = buildTranscriptPrompt(history, userName)
                 val result = provider.complete(config, systemPrompt, transcriptPrompt)
                 _uiState.value = _uiState.value.copy(

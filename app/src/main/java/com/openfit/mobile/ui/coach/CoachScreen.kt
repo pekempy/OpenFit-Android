@@ -98,6 +98,12 @@ fun CoachScreen(container: AppContainer, healthState: TodayUiState) {
         state.error?.let { snackbarHostState.showSnackbar(it) }
     }
 
+    // Keep the ViewModel's bundle current: the ViewModel is created once but
+    // TodayViewModel may deliver a fresher sync after creation (e.g. the
+    // interactive refresh completing while the user is already on this screen).
+    LaunchedEffect(bundle) { viewModel.updateBundle(bundle) }
+
+
     fun send(text: String) {
         if (text.isBlank() || state.isSending) return
         input = ""

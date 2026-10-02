@@ -63,6 +63,7 @@ class TodayViewModel(private val container: AppContainer) : ViewModel() {
             }
             try {
                 val bundle = source.sync(date)
+                BundleCache.save(container.appContext, bundle)
                 val accountLabel = when (settings.dataSourceKind) {
                     HealthDataSourceKind.HEALTH_CONNECT -> "Health Connect"
                     HealthDataSourceKind.GOOGLE_HEALTH_API -> container.authManager.currentAccountEmail()
