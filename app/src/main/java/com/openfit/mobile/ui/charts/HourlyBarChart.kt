@@ -33,7 +33,10 @@ fun HourlyBarChart(
 ) {
     val max = (values.maxOrNull() ?: 0).coerceAtLeast(1)
     val anim = remember(animationKey, values) { Animatable(0f) }
-    LaunchedEffect(animationKey, values) { anim.animateTo(1f, animationSpec = tween(1000, easing = FastOutSlowInEasing)) }
+    LaunchedEffect(animationKey, values) {
+        if (animationKey == 0L) return@LaunchedEffect
+        anim.animateTo(1f, animationSpec = tween(1000, easing = FastOutSlowInEasing))
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {

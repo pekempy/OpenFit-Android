@@ -6,6 +6,7 @@ import com.openfit.mobile.AppContainer
 import com.openfit.mobile.data.health.BundleCache
 import com.openfit.mobile.data.settings.HealthDataSourceKind
 import com.openfit.mobile.model.HealthSnapshotBundle
+import com.openfit.mobile.model.DailySnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,43 +39,57 @@ class TodayViewModel(private val container: AppContainer) : ViewModel() {
             val settings = container.settingsRepository.settingsFlow.first()
             val source = container.activeHealthDataSource(settings.dataSourceKind)
 
-            // Show cache immediately so the user sees data right after tapping
-            // a summary notification, without waiting for a fresh sync.
             val cached = BundleCache.load(container.appContext, date)
             val alreadyHasData = _uiState.value is TodayUiState.Success
+
+            val accountLabel = when (settings.dataSourceKind) {
+                HealthDataSourceKind.HEALTH_CONNECT -> "Health Connect"
+                HealthDataSourceKind.GOOGLE_HEALTH_API -> container.authManager.currentAccountEmail()
+            }
+
             if (!alreadyHasData) {
-                if (cached != null) {
-                    val label = when (settings.dataSourceKind) {
-                        HealthDataSourceKind.HEALTH_CONNECT -> "Health Connect"
-                        HealthDataSourceKind.GOOGLE_HEALTH_API -> container.authManager.currentAccountEmail()
-                    }
-                    _uiState.value = TodayUiState.Success(cached, label, isRefreshing = true)
-                } else {
-                    _uiState.value = TodayUiState.Loading
-                }
+                // Never block the UI with a spinner on launch.
+                // Show cached data instantly if available, otherwise an empty bundle
+                // so the layout appears immediately while the background sync runs.
+                val initialBundle = cached ?: emptyBundle(date)
+                _uiState.value = TodayUiState.Success(
+                    bundle = initialBundle,
+                    accountEmail = if (cached != null) accountLabel else null,
+                    isRefreshing = true,
+                )
             } else {
-                // Already showing data — mark as refreshing without clearing the screen.
                 _uiState.value = (_uiState.value as TodayUiState.Success).copy(isRefreshing = true)
             }
 
             if (!source.isConnected()) {
-                if (!alreadyHasData && cached == null) _uiState.value = TodayUiState.NotConnected
+                // Show NotConnected only when genuinely no data has ever been seen.
+                val hasRealData = (_uiState.value as? TodayUiState.Success)
+                    ?.bundle?.fetchedAtEpochMillis?.let { it > 0L } == true
+                if (!hasRealData) _uiState.value = TodayUiState.NotConnected
                 return@launch
             }
+
             try {
                 val bundle = source.sync(date)
                 BundleCache.save(container.appContext, bundle)
-                val accountLabel = when (settings.dataSourceKind) {
-                    HealthDataSourceKind.HEALTH_CONNECT -> "Health Connect"
-                    HealthDataSourceKind.GOOGLE_HEALTH_API -> container.authManager.currentAccountEmail()
-                }
                 _uiState.value = TodayUiState.Success(bundle, accountLabel)
             } catch (e: Exception) {
-                // Don't clobber cached/existing data with an error on a background refresh.
-                if (_uiState.value !is TodayUiState.Success) {
+                // Don't clobber real data with an error on a background refresh.
+                val hasRealData = (_uiState.value as? TodayUiState.Success)
+                    ?.bundle?.fetchedAtEpochMillis?.let { it > 0L } == true
+                if (!hasRealData) {
                     _uiState.value = TodayUiState.Error(e.message ?: "Failed to sync health data.")
                 }
             }
         }
     }
+
+    private fun emptyBundle(date: String) = HealthSnapshotBundle(
+        selectedDate          = date,
+        today                 = DailySnapshot(date = date),
+        trend                 = emptyList(),
+        exercises             = emptyList(),
+        fetchedAtEpochMillis  = 0L,
+        partial               = false,
+    )
 }

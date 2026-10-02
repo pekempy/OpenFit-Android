@@ -129,7 +129,10 @@ fun DesktopLineChart(
         val targetColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
 
         val anim = remember(animationKey, values) { Animatable(0f) }
-        LaunchedEffect(animationKey, values) { anim.animateTo(1f, animationSpec = tween(1200, easing = FastOutSlowInEasing)) }
+        LaunchedEffect(animationKey, values) {
+            if (animationKey == 0L) return@LaunchedEffect
+            anim.animateTo(1f, animationSpec = tween(1200, easing = FastOutSlowInEasing))
+        }
 
         Canvas(
             modifier = Modifier

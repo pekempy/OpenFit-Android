@@ -76,7 +76,10 @@ fun SleepHypnogramChart(
     val connectorColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
     val anim = remember(animationKey, segments) { Animatable(0f) }
-    LaunchedEffect(animationKey, segments) { anim.animateTo(1f, animationSpec = tween(1400, easing = FastOutSlowInEasing)) }
+    LaunchedEffect(animationKey, segments) {
+        if (animationKey == 0L) return@LaunchedEffect
+        anim.animateTo(1f, animationSpec = tween(1400, easing = FastOutSlowInEasing))
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth().height(height)) {

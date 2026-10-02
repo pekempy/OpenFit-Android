@@ -47,7 +47,10 @@ fun BulletChart(
     val valuePercent = (value / safeMax).toFloat().coerceIn(0f, 1f)
     val targetPercent = target?.let { (it / safeMax).toFloat().coerceIn(0f, 1f) }
     val animPercent = remember(animationKey, value) { Animatable(0f) }
-    LaunchedEffect(animationKey, value) { animPercent.animateTo(valuePercent, animationSpec = tween(900, easing = FastOutSlowInEasing)) }
+    LaunchedEffect(animationKey, value) {
+        if (animationKey == 0L) return@LaunchedEffect
+        animPercent.animateTo(valuePercent, animationSpec = tween(900, easing = FastOutSlowInEasing))
+    }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Box(

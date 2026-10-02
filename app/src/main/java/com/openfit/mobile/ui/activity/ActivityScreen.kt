@@ -46,7 +46,7 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
             is TodayUiState.Error -> EmptyStateMessage(state.message, Modifier.fillMaxSize())
             is TodayUiState.Success -> {
                 val bundle = state.bundle
-                val animKey = maxOf(bundle.fetchedAtEpochMillis, revealKey)
+                val animKey = if (revealKey > 0L) maxOf(bundle.fetchedAtEpochMillis, revealKey) else 0L
                 val today = bundle.today
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),

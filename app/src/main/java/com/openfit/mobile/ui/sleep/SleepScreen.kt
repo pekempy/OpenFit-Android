@@ -56,7 +56,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
             is TodayUiState.Success -> {
                 val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
                 val goals = settings?.goals ?: com.openfit.mobile.data.settings.UserHealthGoals()
-                val animKey = maxOf(state.bundle.fetchedAtEpochMillis, revealKey)
+                val animKey = if (revealKey > 0L) maxOf(state.bundle.fetchedAtEpochMillis, revealKey) else 0L
                 val sleep = state.bundle.today.sleep
                 val naps = state.bundle.today.naps
                 val totalSleepMinutes = state.bundle.today.totalSleepMinutes

@@ -64,7 +64,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
             is TodayUiState.Success -> {
                 val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
                 val goals = settings?.goals ?: com.openfit.mobile.data.settings.UserHealthGoals()
-                val animKey = maxOf(state.bundle.fetchedAtEpochMillis, revealKey)
+                val animKey = if (revealKey > 0L) maxOf(state.bundle.fetchedAtEpochMillis, revealKey) else 0L
                 val units = settings?.units ?: com.openfit.mobile.data.settings.AppUnitSettings()
                 val inspector = com.openfit.mobile.ui.common.LocalMetricInspector.current
                 val today = state.bundle.today

@@ -36,6 +36,7 @@ fun RingProgress(
 ) {
     val animProg = remember(animationKey, progress) { Animatable(0f) }
     LaunchedEffect(animationKey, progress) {
+        if (animationKey == 0L) return@LaunchedEffect
         animProg.animateTo(
             progress.coerceIn(0f, 1f),
             animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),

@@ -33,7 +33,10 @@ fun SegmentedBar(
 ) {
     val total = segments.sumOf { it.first.toDouble() }.toFloat()
     val anim = remember(animationKey, segments) { Animatable(0f) }
-    LaunchedEffect(animationKey, segments) { anim.animateTo(1f, animationSpec = tween(850, easing = FastOutSlowInEasing)) }
+    LaunchedEffect(animationKey, segments) {
+        if (animationKey == 0L) return@LaunchedEffect
+        anim.animateTo(1f, animationSpec = tween(850, easing = FastOutSlowInEasing))
+    }
     Canvas(modifier = modifier.fillMaxWidth().height(height)) {
         if (total <= 0f) return@Canvas
         val radiusPx = cornerRadius.toPx()
