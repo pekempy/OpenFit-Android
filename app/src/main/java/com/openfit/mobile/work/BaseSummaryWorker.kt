@@ -32,6 +32,23 @@ abstract class BaseSummaryWorker(context: Context, params: WorkerParameters) : C
             val settings = container.settingsRepository.settingsFlow.first()
             val schedule = scheduleFor(settings)
             if (schedule.enabled) {
+                // On Android 14+, Health Connect requires READ_HEALTH_DATA_IN_BACKGROUND
+                // for WorkManager tasks. Without it every readRecords() call throws
+                // SecurityException (swallowed to emptyList), producing "no data" summaries.
+                // Detect this early and skip rather than sending a wrong notification.
+                val needsBgPermission = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+                    settings.dataSourceKind == com.openfit.mobile.data.settings.HealthDataSourceKind.HEALTH_CONNECT
+                val hasBgPermission = !needsBgPermission ||
+                    androidx.core.content.ContextCompat.checkSelfPermission(
+                        applicationContext,
+                        com.openfit.mobile.data.healthconnect.HealthConnectManager.BACKGROUND_READ_PERMISSION,
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!hasBgPermission) {
+                    // Open the app and re-trigger the permission grant from there.
+                    notify(container, notificationTitle(),
+                        "OpenFit needs background Health Connect access to generate your summary. Tap to grant it in the app.")
+                    return@try Result.failure()
+                }
                 // Use whichever data source the user configured (Health Connect
                 // or Google Health API) — not the raw cloud HealthRepository.
                 val dataSource = container.activeHealthDataSource(settings.dataSourceKind)

@@ -80,6 +80,13 @@ object HealthConnectManager {
         HealthPermission.getReadPermission(IntermenstrualBleedingRecord::class),
     )
 
+    /** Android 14+ (API 34) requires this separate permission for any background
+     * process (WorkManager, Services) to call HealthConnectClient.readRecords().
+     * On older OS versions the permission string is silently ignored when
+     * requested — background reads are permitted without it. */
+    const val BACKGROUND_READ_PERMISSION =
+        "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
+
     val WRITE_PERMISSIONS: Set<String> = setOf(
         HealthPermission.getWritePermission(HydrationRecord::class),
         HealthPermission.getWritePermission(WeightRecord::class),
@@ -90,7 +97,7 @@ object HealthConnectManager {
         HealthPermission.getWritePermission(HeightRecord::class),
     )
 
-    val ALL_PERMISSIONS: Set<String> = READ_PERMISSIONS + WRITE_PERMISSIONS
+    val ALL_PERMISSIONS: Set<String> = READ_PERMISSIONS + WRITE_PERMISSIONS + setOf(BACKGROUND_READ_PERMISSION)
 
     /** SDK_UNAVAILABLE / SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED / SDK_AVAILABLE. */
     fun sdkStatus(context: Context): Int = HealthConnectClient.getSdkStatus(context)

@@ -128,7 +128,7 @@ class MainActivity : ComponentActivity() {
                     },
                     launchHealthConnectPermission = { onResult ->
                         onHealthConnectResult = onResult
-                        healthConnectLauncher.launch(HealthConnectManager.READ_PERMISSIONS)
+                        healthConnectLauncher.launch(HealthConnectManager.ALL_PERMISSIONS)
                     },
                 )
             }

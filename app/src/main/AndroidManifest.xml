@@ -42,6 +42,11 @@
     <uses-permission android:name="android.permission.health.READ_OVULATION_TEST" />
     <uses-permission android:name="android.permission.health.READ_SEXUAL_ACTIVITY" />
     <uses-permission android:name="android.permission.health.READ_INTERMENSTRUAL_BLEEDING" />
+    <!-- Required on Android 14+ for WorkManager / background workers to read
+         Health Connect data (e.g. scheduled morning and evening summaries).
+         Without this, readRecords() throws SecurityException in the background,
+         silently returning empty results and causing "no data" AI summaries. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
     <uses-permission android:name="android.permission.health.WRITE_HYDRATION" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
     <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
