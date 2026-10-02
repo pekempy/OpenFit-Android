@@ -10,6 +10,7 @@ import com.openfit.mobile.data.health.GoogleHealthDataSource
 import com.openfit.mobile.data.health.HealthApiClient
 import com.openfit.mobile.data.health.HealthDataSource
 import com.openfit.mobile.data.health.HealthRepository
+import com.openfit.mobile.data.health.FallbackHealthDataSource
 import com.openfit.mobile.data.healthconnect.HealthConnectRepository
 import com.openfit.mobile.data.oauth.GoogleAuthManager
 import com.openfit.mobile.data.oauth.TokenStore
@@ -140,9 +141,24 @@ class AppContainer(context: Context) {
     }
 
     // ── Health data source ─────────────────────────────────────────────────
+    //
+    // The setting controls which source is PREFERRED (primary), not which is
+    // the only one used.  When both Health Connect and the Google Health API
+    // are connected, both are queried in parallel and their results merged
+    // field-by-field: primary wins for every non-null value; the secondary
+    // fills any gaps.  If only one source is connected it is used exclusively.
 
-    fun activeHealthDataSource(kind: HealthDataSourceKind): HealthDataSource = when (kind) {
-        HealthDataSourceKind.HEALTH_CONNECT -> healthConnectRepository
-        HealthDataSourceKind.GOOGLE_HEALTH_API -> googleHealthDataSource
-    }
+    fun activeHealthDataSource(kind: HealthDataSourceKind): HealthDataSource =
+        when (kind) {
+            HealthDataSourceKind.HEALTH_CONNECT ->
+                FallbackHealthDataSource(
+                    primary  = healthConnectRepository,
+                    fallback = googleHealthDataSource,
+                )
+            HealthDataSourceKind.GOOGLE_HEALTH_API ->
+                FallbackHealthDataSource(
+                    primary  = googleHealthDataSource,
+                    fallback = healthConnectRepository,
+                )
+        }
 }

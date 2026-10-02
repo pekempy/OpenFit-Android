@@ -606,29 +606,52 @@ private fun ConnectionsSettingsSection(
     // Health Connect
     SectionHeader("Health Connect", Icons.Filled.Favorite)
     Text(
-        "Android's on-device health platform. Provides direct sync with Fitbit, Pixel Watch, and native device sensors without needing Cloud API keys.",
+        "On-device health platform — always used when connected. When both sources are active, the primary source wins for each metric; the other fills any gaps.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
     Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            val isHcActive = settings.dataSourceKind == HealthDataSourceKind.HEALTH_CONNECT && hcGranted == true
+            val hcConnected = hcGranted == true
+            val hcIsPrimary = settings.dataSourceKind == HealthDataSourceKind.HEALTH_CONNECT
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    if (isHcActive) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    when {
+                        hcConnected && hcIsPrimary -> Icons.Filled.CheckCircle
+                        hcConnected               -> Icons.Filled.CheckCircle
+                        else                      -> Icons.Filled.RadioButtonUnchecked
+                    },
                     contentDescription = null,
-                    tint = if (isHcActive) Color(0xFF00C853) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = when {
+                        hcConnected && hcIsPrimary -> Color(0xFF00C853)
+                        hcConnected               -> MaterialTheme.colorScheme.secondary
+                        else                      -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    if (isHcActive) "Active: Connected via Health Connect" else "Health Connect: Not active",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column {
+                    Text(
+                        when {
+                            hcConnected && hcIsPrimary -> "Connected — Primary source"
+                            hcConnected               -> "Connected — Supplement (API is primary)"
+                            else                      -> "Not connected"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (hcConnected && !hcIsPrimary) {
+                        Text(
+                            "HC data fills gaps where the API returns nothing",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
-            if (isHcActive) {
+            if (hcConnected) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = {
@@ -642,16 +665,17 @@ private fun ConnectionsSettingsSection(
                         modifier = Modifier.weight(1f),
                     ) { Text("Permissions") }
 
-                    OutlinedButton(
-                        onClick = {
-                            scope.launch {
-                                container.settingsRepository.setDataSourceKind(HealthDataSourceKind.GOOGLE_HEALTH_API)
-                                onSignedOut()
-                            }
-                        },
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Disconnect") }
+                    if (!hcIsPrimary) {
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    container.settingsRepository.setDataSourceKind(HealthDataSourceKind.HEALTH_CONNECT)
+                                    onDataSourceChanged()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Set as primary") }
+                    }
                 }
             } else {
                 Button(
@@ -669,9 +693,7 @@ private fun ConnectionsSettingsSection(
                     },
                     enabled = hcAvailable,
                     modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Connect Health Connect")
-                }
+                ) { Text("Connect Health Connect") }
             }
         }
     }
@@ -681,29 +703,64 @@ private fun ConnectionsSettingsSection(
     // Google Health API (Cloud OAuth)
     SectionHeader("Google Health API (Cloud OAuth)", Icons.Filled.Cloud)
     Text(
-        "Alternative cloud connector for syncing with Google Health API v4.",
+        "Cloud connector for historical Google Health / Fit data. Used alongside Health Connect when both are active — whichever is not primary fills metrics the primary didn't provide.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-
     Card(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            val isApiActive = settings.dataSourceKind == HealthDataSourceKind.GOOGLE_HEALTH_API && container.authManager.isConnected()
+            val apiConnected = container.authManager.isConnected()
+            val apiIsPrimary = settings.dataSourceKind == HealthDataSourceKind.GOOGLE_HEALTH_API
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
-                    if (isApiActive) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked,
+                    when {
+                        apiConnected && apiIsPrimary -> Icons.Filled.CheckCircle
+                        apiConnected                -> Icons.Filled.CheckCircle
+                        else                        -> Icons.Filled.RadioButtonUnchecked
+                    },
                     contentDescription = null,
-                    tint = if (isApiActive) Color(0xFF00C853) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = when {
+                        apiConnected && apiIsPrimary -> Color(0xFF00C853)
+                        apiConnected                -> MaterialTheme.colorScheme.secondary
+                        else                        -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    if (isApiActive) "Connected (${container.authManager.currentAccountEmail() ?: "Cloud"})" else "Not connected",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
+                Column {
+                    Text(
+                        when {
+                            apiConnected && apiIsPrimary ->
+                                "Connected (${container.authManager.currentAccountEmail() ?: "Cloud"}) — Primary source"
+                            apiConnected ->
+                                "Connected (${container.authManager.currentAccountEmail() ?: "Cloud"}) — Supplement (HC is primary)"
+                            else -> "Not connected"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (apiConnected && !apiIsPrimary) {
+                        Text(
+                            "API data fills gaps where Health Connect returns nothing",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
 
-            if (isApiActive) {
+            if (apiConnected && !apiIsPrimary) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            container.settingsRepository.setDataSourceKind(HealthDataSourceKind.GOOGLE_HEALTH_API)
+                            onDataSourceChanged()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Set as primary") }
+            }
+
+            if (apiConnected) {
                 OutlinedButton(
                     onClick = { scope.launch { container.authManager.signOut(settings.oauthConfig); onSignedOut() } },
                     modifier = Modifier.fillMaxWidth(),
