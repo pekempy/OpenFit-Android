@@ -639,6 +639,47 @@ class HealthConnectRepository(
                 signals = allSignals,
             )
         }.sortedByDescending { it.signals.size }
+        // Post-processing: detect phantom watch entries absorbed into phone
+        val watchSpecificSignals = setOf("Sleep", "HRV", "Breathing", "Skin Temp", "SpO2")
+        
+        val finalDevices = if (pairedDevices.any { device -> 
+            device.deviceVersion in setOf("Watch", "Fitness Band", "Ring") 
+        }) {
+            // A real wearable is already present, use devices as-is
+            pairedDevices
+        } else {
+            // Collect watch-specific signals from phone entries
+            val phoneSignals = pairedDevices
+                .filter { it.deviceVersion == "Phone" }
+                .flatMap { it.signals }
+                .toSet()
+            
+            val collectedWatchSignals = phoneSignals.intersect(watchSpecificSignals)
+            
+            if (collectedWatchSignals.isEmpty()) {
+                // No watch signals in phone entries, use devices as-is
+                pairedDevices
+            } else {
+                // Strip watch signals from phone entries and create synthetic wearable
+                val devicesWithoutWatchSignals = pairedDevices.map { device ->
+                    if (device.deviceVersion == "Phone") {
+                        device.copy(signals = device.signals.filter { it !in watchSpecificSignals })
+                    } else {
+                        device
+                    }
+                }
+                
+                val syntheticWearable = PairedDevice(
+                    id = "inferred_wearable",
+                    deviceType = "Connected Wearable",
+                    deviceVersion = "Watch",
+                    signals = collectedWatchSignals.toList()
+                )
+                
+                // Add synthetic wearable at the front
+                listOf(syntheticWearable) + devicesWithoutWatchSignals
+            }
+        }
 
         val reproductiveHealthEvents = buildList {
             for (r in menstruationFlowRecords) {
@@ -684,7 +725,7 @@ class HealthConnectRepository(
             today = today,
             trend = trend,
             exercises = exercises.filter { it.date == selectedDate },
-            devices = pairedDevices,
+            devices = finalDevices,
             reproductiveHealthEvents = reproductiveHealthEvents,
             fetchedAtEpochMillis = System.currentTimeMillis(),
             partial = false,

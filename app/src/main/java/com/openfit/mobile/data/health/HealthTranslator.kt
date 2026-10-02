@@ -108,14 +108,50 @@ object HealthTranslator {
         val list = payload.arr("pairedDevices")?.filterIsInstance<JsonObject>() ?: return emptyList()
         return list.map { device ->
             val name = device.str("name") ?: ""
+            val rawDeviceType = device.str("deviceType")
+            val deviceVersion = device.str("deviceVersion")
+            
+            // Swap priority: use friendly name (deviceVersion) if available,
+            // otherwise format the raw type string
+            val displayedType = if (!deviceVersion.isNullOrBlank()) {
+                deviceVersion
+            } else if (!rawDeviceType.isNullOrBlank()) {
+                formatDeviceType(rawDeviceType)
+            } else {
+                null
+            }
+            
+            // For version, use formatted raw type if deviceVersion was blank,
+            // otherwise keep the original deviceVersion
+            val computedVersion = if (deviceVersion.isNullOrBlank() && !rawDeviceType.isNullOrBlank()) {
+                formatDeviceType(rawDeviceType)
+            } else {
+                deviceVersion
+            }
+            
             PairedDevice(
                 id = name.substringAfterLast('/').ifBlank { name },
-                deviceType = device.str("deviceType"),
-                deviceVersion = device.str("deviceVersion"),
+                deviceType = displayedType,
+                deviceVersion = computedVersion,
                 batteryLevelPercent = device.numInt("batteryLevel"),
                 lastSyncTimeIso = device.str("lastSyncTime"),
             )
         }
+    }
+    
+    /** Formats a raw device type string (e.g. "PIXEL_WATCH_4") into title-case
+     * with underscores replaced by spaces (e.g. "Pixel watch 4"). */
+    private fun formatDeviceType(rawType: String): String {
+        return rawType
+            .split('_')
+            .mapIndexed { index, part ->
+                if (index == 0) {
+                    part.lowercase().replaceFirstChar { it.uppercase() }
+                } else {
+                    part.lowercase()
+                }
+            }
+            .joinToString(" ")
     }
 
     private fun parseSleepPoint(point: JsonObject): SleepSession? {
