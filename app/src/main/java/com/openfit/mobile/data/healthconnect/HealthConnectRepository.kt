@@ -558,32 +558,59 @@ class HealthConnectRepository(
             }?.value
         }
 
-        // Dedup: HC records from the same physical device can produce multiple
-        // DeviceKey entries when some record types carry full hardware metadata
-        // (manufacturer + model set) while others carry only the data origin
-        // package — resulting in a "phantom" key (TYPE_UNKNOWN, blank mfr,
-        // blank model). The fix: identify phantom keys that share a packageName
-        // with a real key, skip them in the output, and union their signals
-        // into the real entry. Two REAL entries sharing a packageName (e.g.
-        // Pixel phone + Pixel Watch both writing via com.google.android.apps.
-        // healthdata) are left as separate rows — never incorrectly collapsed.
+        // ── Dedup phantom keys ────────────────────────────────────────────────
+        // HC records from the same physical device can produce both a real key
+        // (manufacturer + model set) and a phantom key (TYPE_UNKNOWN, blank
+        // mfr/model) because some record types omit hardware metadata.
+        //
+        // When phone AND watch share a packageName (e.g. com.google.android.
+        // apps.healthdata), phantom signals MUST be distributed by plausibility
+        // rather than given to every real device for that package — otherwise
+        // watch-exclusive signals (Sleep, HRV, SpO2 …) end up on the phone and
+        // the watch disappears from the Devices screen.
+        val wearableTypes = setOf(
+            Device.TYPE_WATCH, Device.TYPE_FITNESS_BAND,
+            Device.TYPE_RING, Device.TYPE_CHEST_STRAP,
+        )
+        // Signals that only a wearable can generate (phone cannot).
+        val wearableExclusiveSignals = setOf(
+            "Sleep", "HRV", "Breathing", "SpO2", "Skin Temp", "Resting HR",
+        )
+
         val realKeysByPackage: Map<String, List<DeviceKey>> = deviceSignals.keys
             .filter { it.type != Device.TYPE_UNKNOWN || it.manufacturer.isNotBlank() || it.model.isNotBlank() }
             .groupBy { it.packageName }
 
-        // Signals that belong to phantoms get absorbed into their real counterpart.
-        val phantomSignalsByPackage: Map<String, Set<String>> = deviceSignals.entries
-            .filter { (key, _) ->
-                key.type == Device.TYPE_UNKNOWN && key.manufacturer.isBlank() && key.model.isBlank()
-                && realKeysByPackage[key.packageName]?.isNotEmpty() == true
-            }
-            .groupBy { (key, _) -> key.packageName }
-            .mapValues { (_, entries) -> entries.flatMap { it.value }.toSet() }
+        // Distribute phantom signals to real keys by plausibility.
+        // When multiple real device types share a package (phone + watch):
+        //   • wearable-exclusive signals  → wearable key(s) only
+        //   • everything else             → all real keys for the package
+        // When only one real key for the package → all phantom signals go there.
+        val phantomSignalsForKey: Map<DeviceKey, Set<String>> = run {
+            val result = mutableMapOf<DeviceKey, MutableSet<String>>()
+            deviceSignals.entries
+                .filter { (k, _) ->
+                    k.type == Device.TYPE_UNKNOWN && k.manufacturer.isBlank() && k.model.isBlank()
+                        && realKeysByPackage[k.packageName]?.isNotEmpty() == true
+                }
+                .forEach { (phantomKey, phantomSigs) ->
+                    val reals = realKeysByPackage[phantomKey.packageName] ?: return@forEach
+                    val wearableKeys = reals.filter { it.type in wearableTypes }
+                    for (sig in phantomSigs) {
+                        val targets = if (sig in wearableExclusiveSignals && wearableKeys.isNotEmpty())
+                            wearableKeys  // wearable-exclusive: only assign to wearable key(s)
+                        else
+                            reals         // ambiguous: give to all real devices for the package
+                        targets.forEach { result.getOrPut(it) { mutableSetOf() }.add(sig) }
+                    }
+                }
+            result.mapValues { it.value.toSet() }
+        }
 
         val pairedDevices = deviceSignals.entries.mapNotNull { (key, signals) ->
             val isPhantom = key.type == Device.TYPE_UNKNOWN &&
                 key.manufacturer.isBlank() && key.model.isBlank()
-            // Skip phantom when a real entry for the same package exists.
+            // Drop phantom when a real entry for the same package exists.
             if (isPhantom && realKeysByPackage[key.packageName]?.isNotEmpty() == true) return@mapNotNull null
 
             val isManualEntry = key.packageName == selfPackage && isPhantom
@@ -606,10 +633,9 @@ class HealthConnectRepository(
                 Device.TYPE_HEAD_MOUNTED -> "Head-mounted"
                 else -> if (isManualEntry) "Manual Entry" else "Health Connect Source"
             }
-            // Absorb any phantom signals for this package, then strip signals
-            // that are physically implausible for the device type — a watch
-            // can't weigh you; a scale can't count steps or record sleep.
-            val rawSignals = (signals + (phantomSignalsByPackage[key.packageName] ?: emptySet()))
+            // Absorb plausibility-distributed phantom signals, then strip
+            // physically implausible signals for this device type.
+            val rawSignals = signals + (phantomSignalsForKey[key] ?: emptySet())
             val implausible: Set<String> = when (key.type) {
                 Device.TYPE_WATCH, Device.TYPE_FITNESS_BAND, Device.TYPE_RING,
                 Device.TYPE_CHEST_STRAP ->
@@ -624,7 +650,6 @@ class HealthConnectRepository(
             val rawId = listOf(key.type.toString(), key.manufacturer, key.model, key.packageName)
                 .joinToString("_")
             val lastSync = deviceLastSync[key]
-
             val btBattery = if (key.type != Device.TYPE_PHONE)
                 matchBtBattery(displayName, key.manufacturer, key.model)
             else null
@@ -639,45 +664,51 @@ class HealthConnectRepository(
                 signals = allSignals,
             )
         }.sortedByDescending { it.signals.size }
-        // Post-processing: detect phantom watch entries absorbed into phone
-        val watchSpecificSignals = setOf("Sleep", "HRV", "Breathing", "Skin Temp", "SpO2")
-        
-        val finalDevices = if (pairedDevices.any { device -> 
-            device.deviceVersion in setOf("Watch", "Fitness Band", "Ring") 
-        }) {
-            // A real wearable is already present, use devices as-is
+
+        // ── Synthetic wearable rescue ─────────────────────────────────────────
+        // If no real wearable row was produced (all watch records had device=null
+        // AND no single real watch key existed), but wearable-exclusive signals
+        // are present on phone/source entries, they were absorbed from phantom
+        // keys. Rescue: strip them from the phone and create a synthetic watch
+        // row with the best available display name.
+        val finalDevices = if (pairedDevices.any { it.deviceVersion in setOf("Watch", "Fitness Band", "Ring") }) {
             pairedDevices
         } else {
-            // Collect watch-specific signals from phone entries
-            val phoneSignals = pairedDevices
-                .filter { it.deviceVersion == "Phone" }
-                .flatMap { it.signals }
-                .toSet()
-            
-            val collectedWatchSignals = phoneSignals.intersect(watchSpecificSignals)
-            
-            if (collectedWatchSignals.isEmpty()) {
-                // No watch signals in phone entries, use devices as-is
+            val allNonWatchSignals = pairedDevices
+                .filter { it.deviceVersion !in setOf("Watch", "Fitness Band", "Ring") }
+                .flatMap { it.signals }.toSet()
+            val rescuedSignals = allNonWatchSignals.intersect(wearableExclusiveSignals)
+            if (rescuedSignals.isEmpty()) {
                 pairedDevices
             } else {
-                // Strip watch signals from phone entries and create synthetic wearable
-                val devicesWithoutWatchSignals = pairedDevices.map { device ->
-                    if (device.deviceVersion == "Phone") {
-                        device.copy(signals = device.signals.filter { it !in watchSpecificSignals })
-                    } else {
-                        device
-                    }
+                // Best display name: BT bonded device matching 'watch', else
+                // friendly app label for the companion package, else fallback.
+                val btWatchEntry = btBatteryByName.entries.firstOrNull { (name, _) ->
+                    name.contains("watch") || name.contains("band") || name.contains("ring")
                 }
-                
-                val syntheticWearable = PairedDevice(
+                val companionLabel = deviceSignals.keys
+                    .filter { it.type == Device.TYPE_UNKNOWN && it.manufacturer.isBlank() && it.model.isBlank() }
+                    .map { friendlySourceName(it.packageName) }
+                    .firstOrNull { it != "OpenFit" && it.isNotBlank() }
+                val syntheticName = btWatchEntry?.key
+                    ?.split(" ")?.joinToString(" ") { it.replaceFirstChar { c -> c.uppercase() } }
+                    ?: companionLabel
+                    ?: "Connected Watch"
+
+                val stripped = pairedDevices.map { device ->
+                    if (device.deviceVersion !in setOf("Watch", "Fitness Band", "Ring")) {
+                        device.copy(signals = device.signals.filter { it !in wearableExclusiveSignals })
+                    } else device
+                }.filter { it.signals.isNotEmpty() || it.deviceVersion == "Phone" }
+
+                val syntheticWatch = PairedDevice(
                     id = "inferred_wearable",
-                    deviceType = "Connected Wearable",
+                    deviceType = syntheticName,
                     deviceVersion = "Watch",
-                    signals = collectedWatchSignals.toList()
+                    batteryLevelPercent = btWatchEntry?.value,
+                    signals = rescuedSignals.toList(),
                 )
-                
-                // Add synthetic wearable at the front
-                listOf(syntheticWearable) + devicesWithoutWatchSignals
+                listOf(syntheticWatch) + stripped
             }
         }
 

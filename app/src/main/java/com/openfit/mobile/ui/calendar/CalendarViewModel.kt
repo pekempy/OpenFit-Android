@@ -3,8 +3,11 @@ package com.openfit.mobile.ui.calendar
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.openfit.mobile.AppContainer
+import com.openfit.mobile.data.health.BundleCache
+import com.openfit.mobile.data.health.CalendarCache
 import com.openfit.mobile.model.DailySnapshot
 import com.openfit.mobile.model.ExerciseSession
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -19,7 +23,7 @@ import java.time.YearMonth
 
 enum class CalendarViewMode { MONTH, WEEK }
 
-// ── Day indicators: which data types are present for a given calendar day ─────
+// ── Day indicators ────────────────────────────────────────────────────────────
 
 data class DayIndicators(
     val hasSteps: Boolean = false,
@@ -27,21 +31,19 @@ data class DayIndicators(
     val hasHR: Boolean = false,
 ) {
     val hasAny: Boolean get() = hasSteps || hasSleep || hasHR
+    fun toCacheEntry() = CalendarCache.DayEntry(hasSteps, hasSleep, hasHR)
 }
+
+fun CalendarCache.DayEntry.toIndicators() = DayIndicators(hasSteps, hasSleep, hasHR)
 
 // ── Calendar UI state ─────────────────────────────────────────────────────────
 
 sealed interface CalendarUiState {
-    /** Initial load — show shimmer skeleton. */
     data object Loading : CalendarUiState
-
-    /** Calendar grid is ready. isLoadingMonth = thin progress stripe while a
-     *  background month fetch is in flight (grid still fully interactive). */
     data class Ready(
-        val indicators: Map<String, DayIndicators>,   // keyed by yyyy-MM-dd
+        val indicators: Map<String, DayIndicators>,
         val isLoadingMonth: Boolean = false,
     ) : CalendarUiState
-
     data class Error(val message: String) : CalendarUiState
 }
 
@@ -73,23 +75,43 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
     private val _viewMode = MutableStateFlow(CalendarViewMode.MONTH)
     val viewMode: StateFlow<CalendarViewMode> = _viewMode.asStateFlow()
 
-    /** date-string → snapshot; persists across month navigations */
+    /** Persisted indicator dots — survives process restarts via CalendarCache. */
+    private val indicatorCache = mutableMapOf<String, DayIndicators>()
+
+    /** Full DailySnapshot objects — in-memory only, used for day detail. */
     private val snapshotCache = mutableMapOf<String, DailySnapshot>()
 
-    /** Months whose full window has been fetched — avoids redundant API calls */
+    /** Months whose indicators have been fully loaded from Health Connect.
+     *  Past months are never re-fetched; current month is always refreshed. */
     private val loadedMonths = mutableSetOf<YearMonth>()
 
     init {
-        loadMonth(YearMonth.now())
+        viewModelScope.launch {
+            // 1. Restore persisted indicators from disk (instant, no HC call).
+            withContext(Dispatchers.IO) { loadDiskCache() }
+
+            // 2. Seed from the existing TodayViewModel bundle cache — gives the
+            //    last 14 days for free without any additional Health Connect query.
+            withContext(Dispatchers.IO) { seedFromBundleCache() }
+
+            // 3. Fetch current month fresh (today's data changes).
+            loadMonth(YearMonth.now())
+        }
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
 
-    /** Called by the pager whenever the displayed month settles on a page. */
     fun loadMonth(month: YearMonth) {
         viewModelScope.launch {
-            if (loadedMonths.contains(month)) {
-                // Already fetched — just refresh the indicator map from cache.
+            val thisMonth = YearMonth.now()
+
+            // Past months that are already in the disk-backed set are done.
+            if (month < thisMonth && loadedMonths.contains(month)) {
+                rebuildIndicators(isLoading = false)
+                return@launch
+            }
+            // Current month: always refetch (skip only if still in same launch).
+            if (month == thisMonth && loadedMonths.contains(month) && indicatorCache.isNotEmpty()) {
                 rebuildIndicators(isLoading = false)
                 return@launch
             }
@@ -97,7 +119,8 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
             val curr = _calendarState.value
             _calendarState.value = when (curr) {
                 is CalendarUiState.Ready -> curr.copy(isLoadingMonth = true)
-                else -> CalendarUiState.Loading
+                else -> if (indicatorCache.isEmpty()) CalendarUiState.Loading
+                        else curr  // keep showing cached data while loading
             }
 
             try {
@@ -105,7 +128,10 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
                 val source = container.activeHealthDataSource(settings.dataSourceKind)
 
                 if (!source.isConnected()) {
-                    _calendarState.value = CalendarUiState.Error("Not connected to health data")
+                    // Offline — show whatever we have from cache
+                    rebuildIndicators(isLoading = false)
+                    if (indicatorCache.isEmpty())
+                        _calendarState.value = CalendarUiState.Error("Not connected to health data")
                     return@launch
                 }
 
@@ -114,14 +140,12 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
                 val clampedEnd = minOf(endOfMonth, today)
                 val startOfMonth = month.atDay(1)
 
-                // Nothing to fetch for fully-future months
                 if (clampedEnd < startOfMonth) {
                     rebuildIndicators(isLoading = false)
                     return@launch
                 }
 
-                // Each sync() call returns a 14-day trend window ending at the
-                // anchor date.  Three anchors cover any calendar month.
+                // Each sync() returns a 14-day trend; 2–3 anchors cover a full month.
                 val anchors = buildList {
                     var anchor = clampedEnd
                     while (anchor >= startOfMonth) {
@@ -130,8 +154,6 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
                     }
                 }
 
-                // Fetch all windows in parallel; individual failures are swallowed
-                // so one bad window doesn't abort the whole month load.
                 coroutineScope {
                     anchors.map { anchorDate ->
                         async {
@@ -141,6 +163,16 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
                                     bundle.trend.forEach { snapshotCache[it.date] = it }
                                     snapshotCache[bundle.today.date] = bundle.today
                                 }
+                                // Update indicator cache from freshly loaded snapshots
+                                synchronized(indicatorCache) {
+                                    (bundle.trend + bundle.today).forEach { snap ->
+                                        indicatorCache[snap.date] = DayIndicators(
+                                            hasSteps = (snap.steps ?: 0) > 0,
+                                            hasSleep = snap.sleep != null && snap.sleep.totalMinutes > 0,
+                                            hasHR = snap.restingHeartRateBpm != null || snap.heartRateAvgBpm != null,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }.forEach { it.await() }
@@ -148,20 +180,23 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
 
                 loadedMonths.add(month)
                 rebuildIndicators(isLoading = false)
+
+                // Persist updated indicators to disk (IO thread, best-effort).
+                withContext(Dispatchers.IO) { persistDiskCache() }
+
             } catch (e: Exception) {
                 val curr2 = _calendarState.value
                 if (curr2 is CalendarUiState.Ready) {
                     _calendarState.value = curr2.copy(isLoadingMonth = false)
                 } else {
-                    _calendarState.value = CalendarUiState.Error(
-                        e.message ?: "Failed to load calendar data"
-                    )
+                    rebuildIndicators(isLoading = false)
+                    if (indicatorCache.isEmpty())
+                        _calendarState.value = CalendarUiState.Error(e.message ?: "Failed to load calendar")
                 }
             }
         }
     }
 
-    /** Toggle selection: tapping an already-selected day deselects it. */
     fun selectDate(date: LocalDate) {
         if (_selectedDate.value == date) {
             _selectedDate.value = null
@@ -183,53 +218,99 @@ class CalendarViewModel(private val container: AppContainer) : ViewModel() {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
-    /** Load the full detail for a tapped day.  Shows cached snapshot
-     *  immediately while a fresh sync runs in the background. */
     private fun loadDayDetail(date: LocalDate) {
-        _dayDetail.value = DayDetailState.Loading
+        // Show cached snapshot immediately if available.
+        val cached = synchronized(snapshotCache) { snapshotCache[date.toString()] }
+        _dayDetail.value = if (cached != null) DayDetailState.Loaded(cached)
+                           else DayDetailState.Loading
+
         viewModelScope.launch {
             try {
                 val settings = container.settingsRepository.settingsFlow.first()
                 val source = container.activeHealthDataSource(settings.dataSourceKind)
 
-                if (source.isConnected()) {
-                    val bundle = source.sync(date.toString())
-                    synchronized(snapshotCache) {
-                        bundle.trend.forEach { snapshotCache[it.date] = it }
-                        snapshotCache[bundle.today.date] = bundle.today
-                    }
-                    _dayDetail.value = DayDetailState.Loaded(bundle.today, bundle.exercises)
-                    rebuildIndicators(isLoading = false)
-                } else {
-                    val cached = snapshotCache[date.toString()]
-                    _dayDetail.value = if (cached != null)
-                        DayDetailState.Loaded(cached)
-                    else
-                        DayDetailState.Error("Not connected to health data")
+                if (!source.isConnected()) {
+                    if (cached == null)
+                        _dayDetail.value = DayDetailState.Error("Not connected to health data")
+                    return@launch
                 }
+
+                val bundle = source.sync(date.toString())
+                synchronized(snapshotCache) {
+                    bundle.trend.forEach { snapshotCache[it.date] = it }
+                    snapshotCache[bundle.today.date] = bundle.today
+                }
+                synchronized(indicatorCache) {
+                    (bundle.trend + bundle.today).forEach { snap ->
+                        indicatorCache[snap.date] = DayIndicators(
+                            hasSteps = (snap.steps ?: 0) > 0,
+                            hasSleep = snap.sleep != null && snap.sleep.totalMinutes > 0,
+                            hasHR = snap.restingHeartRateBpm != null || snap.heartRateAvgBpm != null,
+                        )
+                    }
+                }
+                _dayDetail.value = DayDetailState.Loaded(bundle.today, bundle.exercises)
+                rebuildIndicators(isLoading = false)
+                withContext(Dispatchers.IO) { persistDiskCache() }
             } catch (e: Exception) {
-                val cached = snapshotCache[date.toString()]
-                _dayDetail.value = if (cached != null)
-                    DayDetailState.Loaded(cached)
-                else
-                    DayDetailState.Error(e.message ?: "Failed to load day data")
+                if (cached == null)
+                    _dayDetail.value = DayDetailState.Error(e.message ?: "Failed to load day data")
+                // If we already showed cached data, leave it visible.
             }
         }
     }
 
     private fun rebuildIndicators(isLoading: Boolean) {
-        val indicators = synchronized(snapshotCache) {
-            snapshotCache.mapValues { (_, snap) ->
-                DayIndicators(
+        val snapshot = synchronized(indicatorCache) { indicatorCache.toMap() }
+        _calendarState.value = CalendarUiState.Ready(
+            indicators = snapshot,
+            isLoadingMonth = isLoading,
+        )
+    }
+
+    /** Loads persisted indicators and marks past months as already loaded. */
+    private fun loadDiskCache() {
+        val loaded = CalendarCache.load(container.appContext) ?: return
+        val thisMonth = YearMonth.now()
+        synchronized(indicatorCache) {
+            loaded.days.forEach { (date, entry) ->
+                indicatorCache[date] = entry.toIndicators()
+            }
+        }
+        // Only treat past months as fully loaded; always re-fetch current.
+        loaded.fullMonths.forEach { s ->
+            runCatching { YearMonth.parse(s) }.getOrNull()
+                ?.takeIf { it < thisMonth }
+                ?.let { loadedMonths.add(it) }
+        }
+    }
+
+    /** Seeds indicator + snapshot cache from the existing BundleCache so the
+     *  last 14 days appear immediately without any Health Connect query. */
+    private fun seedFromBundleCache() {
+        val bundle = BundleCache.load(container.appContext, LocalDate.now().toString()) ?: return
+        synchronized(snapshotCache) {
+            bundle.trend.forEach { snapshotCache[it.date] = it }
+            snapshotCache[bundle.today.date] = bundle.today
+        }
+        synchronized(indicatorCache) {
+            (bundle.trend + bundle.today).forEach { snap ->
+                indicatorCache[snap.date] = DayIndicators(
                     hasSteps = (snap.steps ?: 0) > 0,
                     hasSleep = snap.sleep != null && snap.sleep.totalMinutes > 0,
                     hasHR = snap.restingHeartRateBpm != null || snap.heartRateAvgBpm != null,
                 )
             }
         }
-        _calendarState.value = CalendarUiState.Ready(
-            indicators = indicators,
-            isLoadingMonth = isLoading,
-        )
+    }
+
+    /** Persists indicatorCache + loadedMonths to disk. Called after every
+     *  successful Health Connect fetch. Best-effort — failures are silent. */
+    private fun persistDiskCache() {
+        val daysCopy = synchronized(indicatorCache) {
+            indicatorCache.mapValues { (_, v) -> v.toCacheEntry() }
+        }
+        val monthsCopy = loadedMonths.map { it.toString() }.toSet()
+        CalendarCache.save(container.appContext, daysCopy, monthsCopy)
     }
 }
