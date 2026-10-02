@@ -79,6 +79,11 @@ object WearableRegistry {
             || "luxe" in lower
             || "scan" in lower                                   -> WearableCategory.SMART_WATCH
 
+            // Virtual phone-based trackers — Fitbit MobileTrack, Google Fit phone,
+            // app-only sources that use the phone's sensors but show up as a device.
+            "mobile track" in lower || "mobiletrack" in lower
+            || "mobile tracker" in lower                          -> WearableCategory.PHONE
+
             "phone" in lower || "pixel" in lower
             || "samsung" in lower && "ring" !in lower
             || "oneplus" in lower || "xiaomi" in lower

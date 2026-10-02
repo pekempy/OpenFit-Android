@@ -34,7 +34,7 @@ import com.openfit.mobile.ui.today.TodayUiState
  * "Nightly signals" plus cardio card set. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HealthScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit) {
+fun HealthScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit, revealKey: Long = 0L) {
         when (state) {
             is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize())
             is TodayUiState.NotConnected -> EmptyStateMessage(
@@ -44,6 +44,7 @@ fun HealthScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> 
             is TodayUiState.Error -> EmptyStateMessage(state.message, Modifier.fillMaxSize())
             is TodayUiState.Success -> {
                 val bundle = state.bundle
+                val animKey = maxOf(bundle.fetchedAtEpochMillis, revealKey)
                 val today = bundle.today
                 Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
@@ -99,7 +100,7 @@ fun HealthScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> 
                                     minutes.toFloat() to color
                                 }
                                 com.openfit.mobile.ui.charts.SegmentedBar(
-                                    animationKey = bundle.fetchedAtEpochMillis,
+                                    animationKey = animKey,
                                     segments = segments,
                                     modifier = Modifier.fillMaxWidth()
                                 )
@@ -175,7 +176,7 @@ fun HealthScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> 
                                     val baseline = rhrList.filterNotNull().average()
                                     DesktopLineChart(
                                         values = rhrList,
-                                        animationKey = bundle.fetchedAtEpochMillis,
+                                        animationKey = animKey,
                                         dates = bundle.trend.map { it.date },
                                         color = ChartColors.Heart,
                                         target = baseline,
@@ -198,7 +199,7 @@ fun HealthScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> 
                                     val hrvAvg = hrvList.filterNotNull().average()
                                     DesktopLineChart(
                                         values = hrvList,
-                                        animationKey = bundle.fetchedAtEpochMillis,
+                                        animationKey = animKey,
                                         dates = bundle.trend.map { it.date },
                                         color = ChartColors.Hrv,
                                         target = hrvAvg,
@@ -221,7 +222,7 @@ fun HealthScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> 
                                     val avgHrBaseline = avgHrList.filterNotNull().average()
                                     DesktopLineChart(
                                         values = avgHrList,
-                                        animationKey = bundle.fetchedAtEpochMillis,
+                                        animationKey = animKey,
                                         dates = bundle.trend.map { it.date },
                                         color = ChartColors.Heart,
                                         target = avgHrBaseline,

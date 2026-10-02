@@ -45,7 +45,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit) {
+fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit, revealKey: Long = 0L) {
         when (state) {
             is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize())
             is TodayUiState.NotConnected -> EmptyStateMessage(
@@ -56,6 +56,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
             is TodayUiState.Success -> {
                 val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
                 val goals = settings?.goals ?: com.openfit.mobile.data.settings.UserHealthGoals()
+                val animKey = maxOf(state.bundle.fetchedAtEpochMillis, revealKey)
                 val sleep = state.bundle.today.sleep
                 val naps = state.bundle.today.naps
                 val totalSleepMinutes = state.bundle.today.totalSleepMinutes
@@ -105,11 +106,11 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                     // Overnight sleep section
                     if (sleep != null) {
                         Text("Last night's sleep", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        SleepSummary(sleep, goals, state.bundle.fetchedAtEpochMillis)
+                        SleepSummary(sleep, goals, animKey)
 
                         if (sleep.stages.isNotEmpty()) {
                             Text("Stages", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                            StageBreakdown(sleep, state.bundle.fetchedAtEpochMillis)
+                            StageBreakdown(sleep, animKey)
                         }
 
                         if (sleep.segments.isNotEmpty()) {
@@ -117,7 +118,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                             Card(modifier = Modifier.fillMaxWidth()) {
                                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     SleepHypnogramChart(
-                                        animationKey = state.bundle.fetchedAtEpochMillis,
+                                        animationKey = animKey,
                                         segments = sleep.segments,
                                         height = 150.dp
                                     )
@@ -158,7 +159,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
 
                                     // Nap stage breakdown
                                     if (nap.stages.isNotEmpty()) {
-                                        StageBreakdown(nap, state.bundle.fetchedAtEpochMillis)
+                                        StageBreakdown(nap, animKey)
                                     }
                                 }
                             }
@@ -182,7 +183,7 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                                 val goalStr = "${sleepTargetHours}h${if (sleepTargetRemMins > 0) " ${sleepTargetRemMins}m" else ""}"
                                 DesktopColumnChart(
                                     values = state.bundle.trend.map { it.totalSleepMinutes?.toDouble() },
-                                    animationKey = state.bundle.fetchedAtEpochMillis,
+                                    animationKey = animKey,
                                     dates = state.bundle.trend.map { it.date },
                                     color = ChartColors.Sleep,
                                     target = sleepTargetMinutes,

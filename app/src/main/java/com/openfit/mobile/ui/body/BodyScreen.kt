@@ -51,7 +51,7 @@ import com.openfit.mobile.ui.today.TodayUiState
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit) {
+fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit, revealKey: Long = 0L) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
         when (state) {
@@ -64,6 +64,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
             is TodayUiState.Success -> {
                 val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
                 val goals = settings?.goals ?: com.openfit.mobile.data.settings.UserHealthGoals()
+                val animKey = maxOf(state.bundle.fetchedAtEpochMillis, revealKey)
                 val units = settings?.units ?: com.openfit.mobile.data.settings.AppUnitSettings()
                 val inspector = com.openfit.mobile.ui.common.LocalMetricInspector.current
                 val today = state.bundle.today
@@ -173,7 +174,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                             }
                             BulletChart(
                                 value = today.waterLiters ?: 0.0,
-                                animationKey = state.bundle.fetchedAtEpochMillis,
+                                animationKey = animKey,
                                 target = goals.waterLitersGoal,
                                 max = (goals.waterLitersGoal * 1.25).coerceAtLeast(3.0),
                                 label = "Daily hydration target (%.2f L)".format(goals.waterLitersGoal),
@@ -197,7 +198,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                                 val weightAvg = weightList.filterNotNull().average()
                                 DesktopLineChart(
                                     values = weightList,
-                                    animationKey = state.bundle.fetchedAtEpochMillis,
+                                    animationKey = animKey,
                                     dates = trend.map { it.date },
                                     color = ChartColors.Body,
                                     target = weightAvg,
@@ -221,7 +222,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                                 val waterMassAvg = waterMassList.filterNotNull().average()
                                 DesktopLineChart(
                                     values = waterMassList,
-                                    animationKey = state.bundle.fetchedAtEpochMillis,
+                                    animationKey = animKey,
                                     dates = trend.map { it.date },
                                     color = ChartColors.Hrv,
                                     target = waterMassAvg,
@@ -245,7 +246,7 @@ fun BodyScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Un
                                 val bmrAvg = bmrList.filterNotNull().average()
                                 DesktopLineChart(
                                     values = bmrList,
-                                    animationKey = state.bundle.fetchedAtEpochMillis,
+                                    animationKey = animKey,
                                     dates = trend.map { it.date },
                                     color = ChartColors.Body,
                                     target = bmrAvg,

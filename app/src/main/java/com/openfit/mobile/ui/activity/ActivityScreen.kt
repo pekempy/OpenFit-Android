@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit) {
+fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> Unit, revealKey: Long = 0L) {
     val scope = rememberCoroutineScope()
     val labels by container.exerciseLabelStore.labelsFlow.collectAsState(initial = emptyMap())
     val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
@@ -46,6 +46,7 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
             is TodayUiState.Error -> EmptyStateMessage(state.message, Modifier.fillMaxSize())
             is TodayUiState.Success -> {
                 val bundle = state.bundle
+                val animKey = maxOf(bundle.fetchedAtEpochMillis, revealKey)
                 val today = bundle.today
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -100,7 +101,7 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                         Card(modifier = Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(16.dp)) {
                                 HourlyBarChart(
-                                    animationKey = bundle.fetchedAtEpochMillis,
+                                    animationKey = animKey,
                                     values = today.stepsHourly,
                                     color = ChartColors.Movement
                                 )
@@ -124,7 +125,7 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     DesktopColumnChart(
                                         values = bundle.trend.map { it.steps?.toDouble() },
-                                        animationKey = bundle.fetchedAtEpochMillis,
+                                        animationKey = animKey,
                                         dates = bundle.trend.map { it.date },
                                         color = ChartColors.Movement,
                                         target = goals.stepGoal.toDouble(),
@@ -149,7 +150,7 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                                         val elevationAvg = elevationList.filterNotNull().average()
                                         DesktopColumnChart(
                                             values = elevationList,
-                                            animationKey = bundle.fetchedAtEpochMillis,
+                                            animationKey = animKey,
                                             dates = bundle.trend.map { it.date },
                                             color = ChartColors.Movement,
                                             target = elevationAvg,

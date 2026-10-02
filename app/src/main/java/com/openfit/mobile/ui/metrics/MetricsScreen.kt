@@ -24,6 +24,10 @@ import com.openfit.mobile.ui.calendar.CalendarScreen
 import com.openfit.mobile.ui.sleep.SleepScreen
 import com.openfit.mobile.ui.today.TodayUiState
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.snapshotFlow
 
 enum class MetricSubTab(val title: String, val icon: ImageVector) {
     ACTIVITY("Activity", Icons.Filled.DirectionsWalk),
@@ -48,6 +52,19 @@ fun MetricsScreen(
     )
     val scope = rememberCoroutineScope()
     val currentPage = pagerState.currentPage
+
+    // Per-tab reveal key: updated to System.currentTimeMillis() every time the
+    // pager settles on a new page.  Screens combine this with fetchedAtEpochMillis
+    // so charts re-animate on BOTH refresh AND tab swipe, even when adjacent tabs
+    // are pre-composed off-screen by beyondViewportPageCount = 1.
+    val tabRevealKeys = remember { mutableStateMapOf<Int, Long>() }
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.isScrollInProgress to pagerState.currentPage }
+            .filter { (scrolling, _) -> !scrolling }
+            .map { (_, page) -> page }
+            .distinctUntilChanged()
+            .collect { page -> tabRevealKeys[page] = System.currentTimeMillis() }
+    }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Metrics") }) },
@@ -85,11 +102,12 @@ fun MetricsScreen(
                     modifier = Modifier.fillMaxSize(),
                     beyondViewportPageCount = 1,
                 ) { page ->
+                    val revealKey = tabRevealKeys[page] ?: 0L
                     when (tabs[page]) {
-                        MetricSubTab.ACTIVITY -> ActivityScreen(container, state, onRefresh)
-                        MetricSubTab.SLEEP    -> SleepScreen(container, state, onRefresh)
-                        MetricSubTab.VITALS   -> HealthScreen(container, state, onRefresh)
-                        MetricSubTab.BODY     -> BodyScreen(container, state, onRefresh)
+                        MetricSubTab.ACTIVITY -> ActivityScreen(container, state, onRefresh, revealKey)
+                        MetricSubTab.SLEEP    -> SleepScreen(container, state, onRefresh, revealKey)
+                        MetricSubTab.VITALS   -> HealthScreen(container, state, onRefresh, revealKey)
+                        MetricSubTab.BODY     -> BodyScreen(container, state, onRefresh, revealKey)
                         MetricSubTab.HISTORY  -> CalendarScreen(container = container)
                     }
                 }

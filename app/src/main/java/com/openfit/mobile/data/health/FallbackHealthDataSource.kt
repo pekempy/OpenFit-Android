@@ -142,9 +142,38 @@ class FallbackHealthDataSource(
             }
         }
 
-        // Append fallback devices that had no primary match (device known to API but not HC yet)
+        // Append fallback devices that had no primary match
         val extras = fallback.filter { it.id !in usedFallbackIds }
-        return (merged + extras).distinctBy { it.id }
+        val combined = (merged + extras).distinctBy { it.id }
+
+        // Collapse multiple PHONE-category entries (e.g. real phone + "Mobile Track"
+        // virtual tracker from Fitbit) into a single row, keeping the entry with the
+        // richest signals and best display name.
+        val phoneEntries = combined.filter {
+            com.openfit.mobile.model.WearableRegistry.resolveCategory(it.deviceType, it.deviceVersion) ==
+                com.openfit.mobile.model.WearableCategory.PHONE
+        }
+        if (phoneEntries.size <= 1) return combined
+
+        // Pick the "real" phone: prefer entries that have signals, then the longest
+        // display name (more specific), then first-seen.
+        val primaryPhone = phoneEntries.maxWithOrNull(
+            compareBy<PairedDevice> { it.signals.size }
+                .thenBy { (it.deviceType?.length ?: 0) }
+        ) ?: phoneEntries.first()
+
+        // Merge battery + sync time from any other phone entry into the primary
+        val mergedPhone = phoneEntries.fold(primaryPhone) { acc, entry ->
+            if (entry.id == acc.id) acc
+            else acc.copy(
+                batteryLevelPercent = acc.batteryLevelPercent ?: entry.batteryLevelPercent,
+                lastSyncTimeIso     = listOfNotNull(acc.lastSyncTimeIso, entry.lastSyncTimeIso).maxOrNull(),
+                signals             = (acc.signals + entry.signals).distinct(),
+            )
+        }
+
+        val phoneIds = phoneEntries.map { it.id }.toSet()
+        return combined.filter { it.id !in phoneIds } + mergedPhone
     }
 
     /**
