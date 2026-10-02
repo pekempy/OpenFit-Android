@@ -10,6 +10,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -107,6 +115,14 @@ fun DesktopColumnChart(
 
         val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)
         val targetColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
+        var trigger by remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { trigger = true }
+        val anim by animateFloatAsState(
+            if (trigger) 1f else 0f,
+            tween(700, easing = FastOutSlowInEasing),
+            label = "colAnim"
+        )
+
 
         Canvas(
             modifier = Modifier
@@ -145,7 +161,7 @@ fun DesktopColumnChart(
             values.forEachIndexed { index, v ->
                 val numeric = v ?: 0.0
                 val fraction = (numeric / maxVal).toFloat().coerceIn(0f, 1f)
-                val barH = plotHeight * fraction
+                val barH = plotHeight * fraction * anim
                 val left = index * (barWidth + gap)
                 val top = plotHeight - barH
                 val isToday = index == values.size - 1

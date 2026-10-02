@@ -48,6 +48,7 @@ import com.openfit.mobile.data.healthconnect.HealthConnectManager
 import com.openfit.mobile.data.settings.HealthDataSourceKind
 import com.openfit.mobile.data.settings.UserHealthGoals
 import com.openfit.mobile.ui.activity.ActivityScreen
+import com.openfit.mobile.ui.calendar.CalendarScreen
 import com.openfit.mobile.ui.body.BodyScreen
 import com.openfit.mobile.ui.coach.CoachScreen
 import com.openfit.mobile.ui.common.CustomInAppToast
@@ -290,6 +291,9 @@ fun OpenFitApp(
                             onRefresh = { healthViewModel.refresh() },
                             onConnectRequested = { navController.navigate(ROUTE_ONBOARDING) },
                         )
+                    }
+                    composable(Destination.Calendar.route) {
+                        CalendarScreen(container = container)
                     }
                     composable(Destination.Metrics.route) {
                         MetricsScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() })

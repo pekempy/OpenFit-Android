@@ -10,7 +10,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -122,6 +128,14 @@ fun DesktopLineChart(
         val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
         val targetColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
 
+        val trigger = remember { mutableStateOf(false) }
+        LaunchedEffect(Unit) { trigger.value = true }
+        val anim = animateFloatAsState(
+            targetValue = if (trigger.value) 1f else 0f,
+            animationSpec = tween(800, easing = FastOutSlowInEasing),
+            label = "lineAnim"
+        )
+
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
@@ -134,6 +148,7 @@ fun DesktopLineChart(
 
             fun xFor(index: Int): Float = (index.toFloat() / (n - 1).toFloat()) * width
             fun yFor(v: Double): Float = ((yMax - v) / ySpan).toFloat() * plotHeight
+            fun yAnimated(v: Double): Float = plotHeight + (yFor(v) - plotHeight) * anim.value
 
             // Gridlines at 0%, 50%, 100%
             val yMid = yFor(yMin + ySpan / 2.0)
@@ -194,7 +209,7 @@ fun DesktopLineChart(
 
                 seg.forEachIndexed { i, (idx, v) ->
                     val x = xFor(idx)
-                    val y = yFor(v)
+                    val y = yAnimated(v)
                     if (i == 0) {
                         linePath.moveTo(x, y)
                         areaPath.moveTo(x, plotHeight)
@@ -232,7 +247,7 @@ fun DesktopLineChart(
                 // Draw circles for data points
                 for ((idx, v) in seg) {
                     val x = xFor(idx)
-                    val y = yFor(v)
+                    val y = yAnimated(v)
                     val isLast = idx == seg.last().first
                     drawCircle(
                         color = color,
