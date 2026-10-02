@@ -2,6 +2,7 @@ package com.openfit.mobile.data.health
 
 import com.openfit.mobile.model.DailySnapshot
 import com.openfit.mobile.model.HealthSnapshotBundle
+import com.openfit.mobile.model.PairedDevice
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -80,13 +81,70 @@ class FallbackHealthDataSource(
             today     = if (fToday != null) mergeSnapshot(p.today, fToday) else p.today,
             trend     = mergedTrend,
             exercises = (p.exercises + f.exercises).distinctBy { it.id },
-            devices   = (p.devices + f.devices).distinctBy { it.id },
+            devices   = mergeDeviceLists(p.devices, f.devices),
             reproductiveHealthEvents = (p.reproductiveHealthEvents + f.reproductiveHealthEvents)
                 .distinctBy { it.date + it.type },
             fetchedAtEpochMillis = maxOf(p.fetchedAtEpochMillis, f.fetchedAtEpochMillis),
             partial = p.partial || f.partial,
             errors  = p.errors + f.errors,
         )
+    }
+
+    /**
+     * Merges two PairedDevice lists from different data sources (HC and Google
+     * Health API) into a single deduplicated list.
+     *
+     * Problem: HC ids look like `"1_google_pixel_watch_2_com.google.android.apps.healthdata"`;
+     * Google-API ids are bare numeric resource suffixes like `"8675309"`.  They
+     * can never match by id even for the same physical device.
+     *
+     * Strategy: for each primary (HC) device, find the best-matching fallback
+     * (API) device by name-token overlap (≥1 shared meaningful token of ≥3 chars).
+     * When matched, field-level merge:
+     *   - signals come from HC (HC inspects every record; API never populates signals)
+     *   - batteryLevelPercent comes from whichever has it (API REST is more reliable)
+     *   - lastSyncTimeIso takes the more recent value
+     * Fallback devices without a matching primary entry are appended as-is.
+     * A final distinctBy { id } catches any residual id-level duplicates.
+     */
+    private fun mergeDeviceLists(
+        primary: List<PairedDevice>,
+        fallback: List<PairedDevice>,
+    ): List<PairedDevice> {
+        // Tokens: lowercase alpha-numeric words of ≥3 chars, minus noise words.
+        val stopWords = setOf("the", "for", "and", "with", "air", "gen", "pro", "max", "fit")
+        fun tokens(name: String?): Set<String> = (name ?: "")
+            .lowercase()
+            .replace(Regex("[^a-z0-9]+"), " ")
+            .split(" ")
+            .filter { it.length >= 3 && it !in stopWords }
+            .toSet()
+
+        val usedFallbackIds = mutableSetOf<String>()
+
+        val merged = primary.map { pDev ->
+            val pTok = tokens(pDev.deviceType)
+            val match = fallback.firstOrNull { fDev ->
+                fDev.id !in usedFallbackIds &&
+                    tokens(fDev.deviceType).any { it in pTok }
+            }
+            if (match != null) {
+                usedFallbackIds += match.id
+                // Field-level merge: HC wins for signals, best-of for battery/sync
+                pDev.copy(
+                    batteryLevelPercent = pDev.batteryLevelPercent ?: match.batteryLevelPercent,
+                    lastSyncTimeIso     = listOfNotNull(pDev.lastSyncTimeIso, match.lastSyncTimeIso)
+                        .maxOrNull(),
+                    signals = pDev.signals.ifEmpty { match.signals },
+                )
+            } else {
+                pDev
+            }
+        }
+
+        // Append fallback devices that had no primary match (device known to API but not HC yet)
+        val extras = fallback.filter { it.id !in usedFallbackIds }
+        return (merged + extras).distinctBy { it.id }
     }
 
     /**
