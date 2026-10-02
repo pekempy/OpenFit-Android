@@ -92,16 +92,35 @@ class SummaryService {
         val today = bundle.today
         val exerciseLines = bundle.exercises.joinToString("\n") { formatExercise(it) }
         val recentAvgSteps = bundle.trend.mapNotNull { it.steps }.takeIf { it.isNotEmpty() }?.average()?.toInt()
+        val recentAvgRhr = bundle.trend.mapNotNull { it.restingHeartRateBpm }.takeIf { it.isNotEmpty() }?.average()?.toInt()
         val insights = InsightsEngine.generate(bundle, settings.goals)
         return buildString {
-            appendLine("Here's today's activity data for ${bundle.selectedDate}:")
-            today.steps?.let { appendLine("- Steps: $it") }
+            appendLine("Here's today's activity and health readings for ${bundle.selectedDate}:")
+            // Activity metrics
+            today.steps?.let { appendLine("- Steps: $it${recentAvgSteps?.let { avg -> " (14-day average: $avg)" } ?: ""}") }
             today.distanceMeters?.let { appendLine("- Distance: ${"%.2f".format(it / 1000.0)} km") }
             today.activeMinutes?.let { appendLine("- Active minutes: $it") }
             today.zoneMinutes?.let { appendLine("- Heart-rate zone minutes: $it") }
-            today.calories?.let { appendLine("- Calories: ${it.toInt()}") }
+            today.calories?.let { appendLine("- Calories burned: ${it.toInt()}") }
             today.sedentarySeconds?.let { appendLine("- Sedentary time: ${it / 3600}h ${(it % 3600) / 60}m") }
-            recentAvgSteps?.let { appendLine("- 14-day average steps: $it") }
+            // Heart rate
+            today.restingHeartRateBpm?.let { rhr ->
+                val trend = recentAvgRhr?.let { avg -> " (14-day average: $avg bpm)" } ?: ""
+                appendLine("- Resting heart rate: $rhr bpm$trend")
+            }
+            if (today.heartRateMinBpm != null || today.heartRateMaxBpm != null) {
+                val lo = today.heartRateMinBpm?.toString() ?: "?"
+                val hi = today.heartRateMaxBpm?.toString() ?: "?"
+                appendLine("- Heart rate range today: $lo–$hi bpm")
+            }
+            today.hrvMillis?.let { appendLine("- HRV: ${it.toInt()} ms") }
+            // Other vitals
+            today.spo2Percent?.let { appendLine("- Blood oxygen (SpO2): ${"%.0f".format(it)}%") }
+            today.breathingRatePerMin?.let { appendLine("- Breathing rate: ${"%.1f".format(it)} breaths/min") }
+            today.skinTemperatureDeltaC?.let {
+                val sign = if (it >= 0) "+" else ""
+                appendLine("- Skin temperature: $sign${"%.2f".format(it)} °C vs baseline")
+            }
             if (insights.isNotEmpty()) {
                 appendLine("- Automatically detected patterns: " + insights.joinToString("; ") { it.text })
             }
@@ -112,7 +131,7 @@ class SummaryService {
                 appendLine("- No logged exercise sessions today.")
             }
             appendLine()
-            appendLine("Write a short, encouraging end-of-day summary (3-5 sentences) of how active I was today, whether it's above or below my recent average, and one specific, practical suggestion for tomorrow. Plain text, no markdown headers, no bullet lists - just a friendly paragraph.")
+            appendLine("Write a short, encouraging end-of-day summary (3-5 sentences): how active I was today vs my recent average, and flag any heart rate or health reading that looks unusual compared to today's other numbers or my trend. If everything looks normal just focus on the activity. End with one specific, practical suggestion for tomorrow. Plain text, no markdown headers, no bullet lists — just a friendly paragraph.")
         }
     }
 
@@ -121,8 +140,10 @@ class SummaryService {
         val h = duration.toHours()
         val m = duration.toMinutesPart()
         val durationStr = if (h > 0) "${h}h ${m}m" else "${m}m"
+        val dist = session.distanceMeters?.let { ", ${"%.2f".format(it / 1000.0)} km" } ?: ""
         val calories = session.caloriesBurned?.let { " (${it.toInt()} kcal)" } ?: ""
-        return "  * ${session.originalType}: $durationStr$calories"
+        val hr = session.averageHeartRateBpm?.let { ", avg HR $it bpm" } ?: ""
+        return "  * ${session.originalType}: $durationStr$dist$calories$hr"
     }
 
     private companion object

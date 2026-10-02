@@ -123,7 +123,7 @@ object HealthTranslator {
         val interval = sleep.obj("interval")
         val summary = sleep.obj("summary")
         val endCivil = interval?.get("civilEndTime")
-        val date = dateFromCivil(endCivil) ?: interval?.str("endTime")?.take(10) ?: return null
+        val date = dateFromCivil(endCivil) ?: localDateFromUtc(interval?.str("endTime")) ?: return null
 
         val hasDetailedStages = (summary.arr("stagesSummary") ?: emptyList<JsonElement>())
             .filterIsInstance<JsonObject>()
@@ -163,6 +163,20 @@ object HealthTranslator {
         "deep", "light", "rem", "wake" -> type
         else -> null
     }
+
+    /** Converts a UTC ISO-8601 timestamp to a local YYYY-MM-DD date using
+     * the device's default timezone. Falls back to slicing the UTC string if
+     * parsing fails so we never return null on a valid-looking timestamp. */
+    private fun localDateFromUtc(utcString: String?): String? {
+        utcString ?: return null
+        return runCatching {
+            java.time.Instant.parse(utcString)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toLocalDate()
+                .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE)
+        }.getOrElse { utcString.take(10) }
+    }
+
 
     private fun parseExercisePoint(point: JsonObject): ExerciseSession? {
         val exercise = point.obj("exercise") ?: return null

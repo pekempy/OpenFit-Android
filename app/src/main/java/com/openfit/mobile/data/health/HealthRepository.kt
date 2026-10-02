@@ -68,7 +68,7 @@ class HealthRepository(
             },
             "sleepRaw" to async {
                 runCatching {
-                    listReconcile(bearer, "sleep", "sleep", trendStart.format(isoFormatter), dayAfter.format(isoFormatter), dataSourceFamily = "google-wearables", pageSize = "25")
+                    listReconcile(bearer, "sleep", "sleep", trendStart.format(isoFormatter), dayAfter.format(isoFormatter), pageSize = "25")
                 }.getOrNull()
             },
             "activitiesRaw" to async {
