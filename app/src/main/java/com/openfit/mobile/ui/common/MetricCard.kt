@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -60,9 +60,9 @@ fun MetricCard(
         if (accentColor != defaultPrimary) base.copy(accentColor = accentColor) else base
     }
 
-    Card(
+    ElevatedCard(
         modifier = modifier
-            .clip(CardDefaults.shape)
+            .clip(CardDefaults.elevatedShape)
             .combinedClickable(
                 onClick = {
                     if (onClick != null) onClick() else inspector.showToast(detail)
@@ -72,7 +72,10 @@ fun MetricCard(
                     if (onLongClick != null) onLongClick() else inspector.showSheet(detail)
                 },
             ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        ),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
