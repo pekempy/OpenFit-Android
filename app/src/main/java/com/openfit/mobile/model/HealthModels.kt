@@ -77,6 +77,7 @@ data class SleepSession(
     val efficiencyPercent: Int? = null,
     val stages: List<SleepStageMinutes> = emptyList(),
     val segments: List<SleepStageSegment> = emptyList(),
+    val awakeningsCount: Int? = null,
     /** True when the session started in the daytime (10:00–20:59 local time),
      * meaning it is a nap rather than the main overnight sleep. */
     val isNap: Boolean = false,

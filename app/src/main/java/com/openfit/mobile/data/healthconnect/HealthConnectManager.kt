@@ -92,7 +92,6 @@ object HealthConnectManager {
         HealthPermission.getWritePermission(WeightRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
         HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
-        HealthPermission.getWritePermission(TotalCaloriesBurnedRecord::class),
         HealthPermission.getWritePermission(NutritionRecord::class),
         HealthPermission.getWritePermission(HeightRecord::class),
     )

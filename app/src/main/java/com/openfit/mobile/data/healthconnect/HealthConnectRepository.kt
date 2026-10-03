@@ -159,10 +159,6 @@ class HealthConnectRepository(
         val hrvRecords = hrvD.await()
         val respRecords = respD.await()
         val spo2Records = spo2D.await().toMutableList()
-        val allTimeSpo2 = readAllRecords<OxygenSaturationRecord>(client, TimeRangeFilter.after(Instant.EPOCH))
-        if (spo2Records.isEmpty() && allTimeSpo2.isNotEmpty()) {
-            spo2Records.addAll(allTimeSpo2)
-        }
         val skinTempRecords = skinTempD.await()
         val bodyTempRecords = bodyTempD.await()
         val basalTempRecords = basalTempD.await()
@@ -287,14 +283,6 @@ class HealthConnectRepository(
             spo2ByDate[dDirect] = pct
             spo2ByDate[dOvernight] = pct
         }
-        if (spo2ByDate.isEmpty()) {
-            for (session in sleepRecords) {
-                val d = session.endTime.atZone(zone).toLocalDate().toString()
-                val minutes = Duration.between(session.startTime, session.endTime).toMinutes()
-                val base = 97.0 + (((minutes * 7) % 3) * 0.5)
-                spo2ByDate[d] = base
-            }
-        }
 
         val respByDate = mutableMapOf<String, Double>()
         for (r in respRecords) {
@@ -307,29 +295,12 @@ class HealthConnectRepository(
 
         val skinTempByDate = mutableMapOf<String, Double>()
         for (r in skinTempRecords) {
-            val deltaC = if (r.deltas.isNotEmpty()) {
-                r.deltas.map { it.delta.inCelsius }.average()
-            } else 0.0
+            if (r.deltas.isEmpty()) continue
+            val deltaC = r.deltas.map { it.delta.inCelsius }.average()
             val dDirect = dateOfInstant(r.startTime)
             val dOvernight = overnightDateOfInstant(r.startTime)
             skinTempByDate[dDirect] = deltaC
             skinTempByDate[dOvernight] = deltaC
-        }
-        if (skinTempByDate.isEmpty()) {
-            for (r in basalTempRecords) {
-                val delta = r.temperature.inCelsius - 36.5
-                val dDirect = dateOfInstant(r.time)
-                val dOvernight = overnightDateOfInstant(r.time)
-                skinTempByDate.putIfAbsent(dDirect, delta)
-                skinTempByDate.putIfAbsent(dOvernight, delta)
-            }
-            for (r in bodyTempRecords) {
-                val delta = r.temperature.inCelsius - 37.0
-                val dDirect = dateOfInstant(r.time)
-                val dOvernight = overnightDateOfInstant(r.time)
-                skinTempByDate.putIfAbsent(dDirect, delta)
-                skinTempByDate.putIfAbsent(dOvernight, delta)
-            }
         }
 
         val sleepByDate = parseSleepSessions(sleepRecords, zone)
@@ -379,6 +350,28 @@ class HealthConnectRepository(
                 .sumOf { it.elevation.inMeters }
             return meters.takeIf { it > 0.0 }
         }
+        fun heartRateStatsFor(start: Instant, end: Instant): Double? {
+            val bpms = hrRecords
+                .filter { it.startTime < end && it.endTime > start }
+                .flatMap { it.samples }
+                .filter { it.time >= start && it.time < end }
+                .map { it.beatsPerMinute.toDouble() }
+            return if (bpms.isEmpty()) null else bpms.average()
+        }
+
+        fun caloriesBurnedFor(start: Instant, end: Instant): Double? {
+            val kcal = activeCalRecords
+                .filter { it.startTime < end && it.endTime > start }
+                .sumOf { it.energy.inKilocalories }
+            return kcal.takeIf { it > 0.0 }
+        }
+
+        fun distanceForSession(start: Instant, end: Instant): Double? {
+            val meters = distanceRecords
+                .filter { it.startTime < end && it.endTime > start }
+                .sumOf { it.distance.inMeters }
+            return meters.takeIf { it > 0.0 }
+        }
 
         val exercises = exerciseRecords.map { session ->
             val (avgPower, maxPower) = powerStatsFor(session.startTime, session.endTime)
@@ -390,9 +383,9 @@ class HealthConnectRepository(
                 endTimeIso = session.endTime.toString(),
                 durationMinutes = Duration.between(session.startTime, session.endTime).toMinutes().toInt(),
                 originalType = session.title?.takeIf { it.isNotBlank() } ?: "Exercise",
-                averageHeartRateBpm = null,
-                caloriesBurned = null,
-                distanceMeters = null,
+                averageHeartRateBpm = heartRateStatsFor(session.startTime, session.endTime)?.toInt(),
+                caloriesBurned = caloriesBurnedFor(session.startTime, session.endTime),
+                distanceMeters = distanceForSession(session.startTime, session.endTime),
                 elevationGainedMeters = elevationGainedFor(session.startTime, session.endTime),
                 averagePowerWatts = avgPower,
                 maxPowerWatts = maxPower,
@@ -851,6 +844,8 @@ class HealthConnectRepository(
                             SleepSessionRecord.STAGE_TYPE_REM -> "rem"
                             SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> "light"
                             SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "wake"
+                            SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
+                            SleepSessionRecord.STAGE_TYPE_UNKNOWN -> "wake"
                             else -> null
                         } ?: continue
                         stageMinutes[key] = (stageMinutes[key] ?: 0) + minutes
@@ -862,6 +857,8 @@ class HealthConnectRepository(
                             SleepSessionRecord.STAGE_TYPE_REM -> "rem"
                             SleepSessionRecord.STAGE_TYPE_LIGHT, SleepSessionRecord.STAGE_TYPE_SLEEPING -> "light"
                             SleepSessionRecord.STAGE_TYPE_AWAKE, SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "wake"
+                            SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
+                            SleepSessionRecord.STAGE_TYPE_UNKNOWN -> "wake"
                             else -> null
                         } ?: return@mapNotNull null
                         SleepStageSegment(
@@ -869,6 +866,17 @@ class HealthConnectRepository(
                             startTimeIso = stage.startTime.toString(),
                             endTimeIso = stage.endTime.toString(),
                         )
+                    }
+                    // Count discrete wake bouts (consecutive wake segments = 1 interruption)
+                    val awakeningsCount = run {
+                        var count = 0
+                        var prevWake = false
+                        for (seg in segments) {
+                            val isWake = seg.stage == "wake"
+                            if (isWake && !prevWake) count++
+                            prevWake = isWake
+                        }
+                        count
                     }
                     val totalMinutes = if (asleepMinutes > 0) asleepMinutes
                         else Duration.between(session.startTime, session.endTime).toMinutes().toInt()
@@ -881,6 +889,7 @@ class HealthConnectRepository(
                         efficiencyPercent = if (inBedMinutes > 0) (totalMinutes * 100 / inBedMinutes) else null,
                         stages = stageMinutes.map { (stage, minutes) -> SleepStageMinutes(stage, minutes) },
                         segments = segments,
+                        awakeningsCount = awakeningsCount.takeIf { it > 0 },
                         isNap = isNap,
                     )
                 }

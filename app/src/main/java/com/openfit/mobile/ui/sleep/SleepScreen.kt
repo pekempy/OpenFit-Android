@@ -255,6 +255,14 @@ private fun SleepSummary(sleep: SleepSession, goals: com.openfit.mobile.data.set
                 }
             }
 
+            if ((sleep.awakeningsCount ?: 0) > 0) {
+                Text(
+                    text = "${sleep.awakeningsCount} interruption${if (sleep.awakeningsCount == 1) "" else "s"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
             val targetMin = goals.sleepMinutesGoal.toDouble()
             val targetH = goals.sleepMinutesGoal / 60
             val targetM = goals.sleepMinutesGoal % 60
