@@ -64,6 +64,11 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                     modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    Text(
+                        "Sleep",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
                     // Total sleep header card
                     if (totalSleepMinutes != null) {
                         Card(modifier = Modifier.fillMaxWidth()) {

@@ -55,31 +55,29 @@ fun TodayScreen(
     onConnectRequested: () -> Unit,
 ) {
     val isRefreshing = (state as? TodayUiState.Success)?.isRefreshing ?: false
-    Scaffold(topBar = { TopAppBar(title = { Text("Today") }) }) { padding ->
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize().padding(padding),
-        ) {
-            when (val s = state) {
-                is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize())
-                is TodayUiState.NotConnected -> Column(
-                    modifier = Modifier.fillMaxSize().padding(24.dp),
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    EmptyStateMessage("Connect your Google Health account in Settings to see your data here.")
-                    Button(onClick = onConnectRequested, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                        Text("Connect Google Health")
-                    }
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = onRefresh,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        when (val s = state) {
+            is TodayUiState.Loading -> LoadingBlock(Modifier.fillMaxSize())
+            is TodayUiState.NotConnected -> Column(
+                modifier = Modifier.fillMaxSize().padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+            ) {
+                EmptyStateMessage("Connect your Google Health account in Settings to see your data here.")
+                Button(onClick = onConnectRequested, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                    Text("Connect Google Health")
                 }
-                is TodayUiState.Error -> Column(modifier = Modifier.fillMaxSize()) {
-                    EmptyStateMessage(s.message)
-                    Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-                        Text("Retry")
-                    }
-                }
-                is TodayUiState.Success -> TodayContent(container, PaddingValues(0.dp), s)
             }
+            is TodayUiState.Error -> Column(modifier = Modifier.fillMaxSize()) {
+                EmptyStateMessage(s.message)
+                Button(onClick = onRefresh, modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                    Text("Retry")
+                }
+            }
+            is TodayUiState.Success -> TodayContent(container, PaddingValues(0.dp), s)
         }
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -53,7 +54,14 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    item { Text("Today's movement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
+                    item {
+                        Text(
+                            "Activity",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    item { Text("Movement", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
                     item {
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             MetricCard(
@@ -94,6 +102,57 @@ fun ActivityScreen(container: AppContainer, state: TodayUiState, onRefresh: () -
                                 modifier = Modifier.fillMaxWidth(),
                                 accentColor = ChartColors.Movement,
                             )
+                        }
+                    }
+                    // ── Heart rate ────────────────────────────────────────
+                    val hasHr = today.restingHeartRateBpm != null ||
+                        today.heartRateMinBpm != null ||
+                        today.heartRateMaxBpm != null ||
+                        today.hrvMillis != null
+                    if (hasHr) {
+                        item {
+                            Text(
+                                "Heart rate",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        if (today.restingHeartRateBpm != null ||
+                            today.heartRateMinBpm != null ||
+                            today.heartRateMaxBpm != null) {
+                            item {
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    today.restingHeartRateBpm?.let { rhr ->
+                                        MetricCard(
+                                            label = "Resting HR",
+                                            icon  = Icons.Filled.Favorite,
+                                            value = "$rhr bpm",
+                                            modifier = Modifier.weight(1f),
+                                            accentColor = ChartColors.Heart,
+                                        )
+                                    }
+                                    if (today.heartRateMinBpm != null || today.heartRateMaxBpm != null) {
+                                        MetricCard(
+                                            label = "HR range",
+                                            icon  = Icons.Filled.Favorite,
+                                            value = "${today.heartRateMinBpm ?: "?"}–${today.heartRateMaxBpm ?: "?"} bpm",
+                                            modifier = Modifier.weight(1f),
+                                            accentColor = ChartColors.Heart,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        today.hrvMillis?.let { hrv ->
+                            item {
+                                MetricCard(
+                                    label = "HRV",
+                                    icon  = Icons.Filled.Favorite,
+                                    value = "${hrv.toInt()} ms",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    accentColor = ChartColors.Hrv,
+                                )
+                            }
                         }
                     }
                     item { Text("Steps per hour (today)", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold) }
