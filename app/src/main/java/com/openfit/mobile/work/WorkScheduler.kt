@@ -8,6 +8,7 @@ import androidx.work.WorkManager
 import com.openfit.mobile.AppContainer
 import com.openfit.mobile.data.settings.SummarySchedule
 import java.time.Duration
+import java.time.LocalTime
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
@@ -72,10 +73,16 @@ object WorkScheduler {
     ) {
         val wm = WorkManager.getInstance(context)
         if (!enabled) { wm.cancelUniqueWork(HYDRATION_WORK_NAME); return }
-        // First fire at the next window-start (today if still future, else tomorrow)
-        val delayMs = computeInitialDelayMillis(morningHour, morningMinute)
+        // If we're already inside the active window (past morning start), fire in
+        // 1 minute so the user gets reminders today instead of waiting until
+        // tomorrow's window start.
+        val nowTime = ZonedDateTime.now().toLocalTime()
+        val windowStart = LocalTime.of(morningHour, morningMinute)
+        val delayMs = if (nowTime >= windowStart) 60_000L
+                      else computeInitialDelayMillis(morningHour, morningMinute)
         enqueue(context, HYDRATION_WORK_NAME, HydrationReminderWorker::class.java, delayMs)
     }
+
 
     /** Called by [HydrationReminderWorker] to chain the next occurrence. */
     fun enqueueHydrationReminder(context: Context, delayMs: Long) =

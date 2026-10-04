@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -57,14 +57,14 @@ import com.openfit.mobile.ui.common.MetricInspectorState
 import com.openfit.mobile.ui.common.SimpleViewModelFactory
 import com.openfit.mobile.ui.data.DataScreen
 import com.openfit.mobile.ui.health.HealthScreen
-import com.openfit.mobile.ui.metrics.MetricSubTab
-import com.openfit.mobile.ui.metrics.MetricsScreen
+import com.openfit.mobile.ui.calendar.CalendarScreen
 import com.openfit.mobile.ui.navigation.Destination
 import com.openfit.mobile.ui.navigation.ROUTE_ONBOARDING
 import com.openfit.mobile.ui.onboarding.OnboardingScreen
 import com.openfit.mobile.ui.settings.SettingsScreen
 import kotlinx.coroutines.launch
 import com.openfit.mobile.ui.sleep.SleepScreen
+import com.openfit.mobile.ui.you.YouScreen
 import com.openfit.mobile.ui.theme.OpenFitTheme
 import com.openfit.mobile.ui.today.TodayScreen
 import com.openfit.mobile.ui.today.TodayViewModel
@@ -186,21 +186,25 @@ fun OpenFitApp(
     val coachEnabled = settings?.isCoachConfigured == true
 
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
+    val currentRoute   = backStackEntry?.destination?.route
+
+    // Bottom bar visible only on primary tabs; hidden on secondary push-screens
     val bottomBarItems = Destination.bottomBarItems.filter { it != Destination.Coach || coachEnabled }
-    val isMetricsActive = currentRoute == Destination.Metrics.route || currentRoute in listOf("activity", "sleep", "health", "body")
-    val isDevicesActive = currentRoute == Destination.Devices.route || currentRoute == "data"
-    val showBottomBar = Destination.bottomBarItems.any { it.route == currentRoute } || isMetricsActive || isDevicesActive
+    val primaryRoutes  = bottomBarItems.map { it.route }.toSet()
+    val showBottomBar  = currentRoute in primaryRoutes
+
+    // FAB visible on data screens; hidden on Coach (own input) and You (nav hub)
+    val showFab = showBottomBar &&
+        currentRoute != Destination.Coach.route &&
+        currentRoute != Destination.You.route
 
     val inspectorState = remember { MetricInspectorState() }
-    val scope = rememberCoroutineScope()
-    val goals = settings?.goals ?: UserHealthGoals()
-    val units = settings?.units ?: com.openfit.mobile.data.settings.AppUnitSettings()
+    val scope          = rememberCoroutineScope()
+    val goals          = settings?.goals ?: UserHealthGoals()
+    val units          = settings?.units ?: com.openfit.mobile.data.settings.AppUnitSettings()
     var quickLogCategory by remember { mutableStateOf<com.openfit.mobile.ui.common.QuickLogCategory?>(null) }
 
-    // Auto-trigger the Health Connect permission dialog when background access is
-    // missing and summaries are enabled. Fires every time the app opens (including
-    // from the "grant it in the app" notification tap) until the user grants it.
+    // Background Health Connect permission (Android 14+)
     val summariesEnabled = settings?.morningSleepSummary?.enabled == true ||
         settings?.eveningActivitySummary?.enabled == true
     val needsBgPermission = connected &&
@@ -214,9 +218,8 @@ fun OpenFitApp(
             context,
             com.openfit.mobile.data.healthconnect.HealthConnectManager.BACKGROUND_READ_PERMISSION,
         ) == PackageManager.PERMISSION_GRANTED
-        if (!hasBg) launchHealthConnectPermission { /* dialog handled; next open will see it granted */ }
+        if (!hasBg) launchHealthConnectPermission { }
     }
-
 
     CompositionLocalProvider(LocalMetricInspector provides inspectorState) {
         Box(Modifier.fillMaxSize()) {
@@ -224,23 +227,22 @@ fun OpenFitApp(
                 contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
                 bottomBar = {
                     if (showBottomBar) {
-                        NavigationBar {
+                        NavigationBar(
+                            windowInsets = androidx.compose.material3.NavigationBarDefaults.windowInsets,
+                        ) {
                             bottomBarItems.forEach { destination ->
-                                val isSelected = when (destination) {
-                                    Destination.Metrics -> isMetricsActive
-                                    Destination.Devices -> isDevicesActive
-                                    else -> currentRoute == destination.route
-                                }
                                 NavigationBarItem(
-                                    selected = isSelected,
+                                    selected = currentRoute == destination.route,
                                     onClick = {
                                         navController.navigate(destination.route) {
-                                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                            popUpTo(navController.graph.findStartDestination().id) {
+                                                saveState = true
+                                            }
                                             launchSingleTop = true
-                                            restoreState = true
+                                            restoreState    = true
                                         }
                                     },
-                                    icon = { Icon(destination.icon, contentDescription = destination.label) },
+                                    icon  = { Icon(destination.icon, contentDescription = destination.label) },
                                     label = { Text(destination.label) },
                                 )
                             }
@@ -249,26 +251,17 @@ fun OpenFitApp(
                 },
             ) { padding ->
                 NavHost(
-                    navController = navController,
-                    startDestination = startDestination,
-                    modifier = Modifier
-                        .padding(bottom = padding.calculateBottomPadding())
-                        .consumeWindowInsets(
-                            PaddingValues(bottom = padding.calculateBottomPadding())
-                        ),
-                    enterTransition = {
-                        fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f)
-                    },
-                    exitTransition = {
-                        fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.96f)
-                    },
-                    popEnterTransition = {
-                        fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f)
-                    },
-                    popExitTransition = {
-                        fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.96f)
-                    },
+                    navController      = navController,
+                    startDestination   = startDestination,
+                    modifier           = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = padding.calculateBottomPadding()),
+                    enterTransition    = { fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f) },
+                    exitTransition     = { fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.96f) },
+                    popEnterTransition = { fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f) },
+                    popExitTransition  = { fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.96f) },
                 ) {
+                    // ── Onboarding ─────────────────────────────────────────
                     composable(ROUTE_ONBOARDING) {
                         OnboardingScreen(
                             container = container,
@@ -283,6 +276,8 @@ fun OpenFitApp(
                             },
                         )
                     }
+
+                    // ── Primary tabs ───────────────────────────────────────
                     composable(Destination.Today.route) {
                         TodayScreen(
                             container = container,
@@ -291,29 +286,57 @@ fun OpenFitApp(
                             onConnectRequested = { navController.navigate(ROUTE_ONBOARDING) },
                         )
                     }
-                    composable(Destination.Metrics.route) {
-                        MetricsScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() })
-                    }
-                    composable(Destination.Devices.route) {
-                        DataScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() })
+                    composable(Destination.Sleep.route) {
+                        SleepScreen(
+                            container = container,
+                            state     = healthState,
+                            onRefresh = { healthViewModel.refresh() },
+                        )
                     }
                     composable(Destination.Activity.route) {
-                        MetricsScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() }, initialTab = MetricSubTab.ACTIVITY)
-                    }
-                    composable(Destination.Sleep.route) {
-                        MetricsScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() }, initialTab = MetricSubTab.SLEEP)
-                    }
-                    composable(Destination.Health.route) {
-                        MetricsScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() }, initialTab = MetricSubTab.VITALS)
-                    }
-                    composable(Destination.Body.route) {
-                        MetricsScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() }, initialTab = MetricSubTab.BODY)
-                    }
-                    composable("data") {
-                        DataScreen(container = container, state = healthState, onRefresh = { healthViewModel.refresh() })
+                        ActivityScreen(
+                            container = container,
+                            state     = healthState,
+                            onRefresh = { healthViewModel.refresh() },
+                        )
                     }
                     composable(Destination.Coach.route) {
                         CoachScreen(container = container, healthState = healthState)
+                    }
+                    composable(Destination.You.route) {
+                        YouScreen(
+                            onNavigateToVitals   = { navController.navigate(Destination.Vitals.route) },
+                            onNavigateToBody     = { navController.navigate(Destination.Body.route) },
+                            onNavigateToHistory  = { navController.navigate(Destination.History.route) },
+                            onNavigateToDevices  = { navController.navigate(Destination.Devices.route) },
+                            onNavigateToSettings = { navController.navigate(Destination.Settings.route) },
+                        )
+                    }
+
+                    // ── Secondary screens (pushed from YouScreen) ──────────
+                    composable(Destination.Vitals.route) {
+                        HealthScreen(
+                            container = container,
+                            state     = healthState,
+                            onRefresh = { healthViewModel.refresh() },
+                        )
+                    }
+                    composable(Destination.Body.route) {
+                        BodyScreen(
+                            container = container,
+                            state     = healthState,
+                            onRefresh = { healthViewModel.refresh() },
+                        )
+                    }
+                    composable(Destination.History.route) {
+                        CalendarScreen(container = container)
+                    }
+                    composable(Destination.Devices.route) {
+                        DataScreen(
+                            container = container,
+                            state     = healthState,
+                            onRefresh = { healthViewModel.refresh() },
+                        )
                     }
                     composable(Destination.Settings.route) {
                         SettingsScreen(
@@ -323,18 +346,15 @@ fun OpenFitApp(
                             onDataSourceChanged = { healthViewModel.refresh() },
                             onSignedOut = {
                                 isConnected = false
-                                navController.navigate(ROUTE_ONBOARDING) {
-                                    popUpTo(0)
-                                }
+                                navController.navigate(ROUTE_ONBOARDING) { popUpTo(0) }
                             },
                         )
                     }
                 }
             }
 
-            // Quick Log SpeedDial FAB (shown on health data screens; hidden on
-            // Coach, whose own message input occupies the same bottom-end corner)
-            if (showBottomBar && currentRoute != Destination.Coach.route && currentRoute != Destination.Settings.route) {
+            // Quick Log FAB — data-entry screens only
+            if (showFab) {
                 com.openfit.mobile.ui.common.QuickLogSpeedDial(
                     onSelectCategory = { cat -> quickLogCategory = cat },
                     modifier = Modifier

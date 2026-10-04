@@ -155,6 +155,14 @@ fun QuickLogModalSheet(
     }
 }
 
+private data class DrinkPreset(val emoji: String, val label: String, val ml: Int)
+private val DRINK_PRESETS = listOf(
+    DrinkPreset("☕", "Coffee",      250),
+    DrinkPreset("🫖", "Tea",         250),
+    DrinkPreset("🫗", "Pint",        568),
+    DrinkPreset("💧", "Litre",      1000),
+)
+
 @Composable
 private fun LogWaterForm(
     container: AppContainer,
@@ -165,28 +173,42 @@ private fun LogWaterForm(
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var amountMl by remember { mutableStateOf(250) }
+    var selectedPreset by remember { mutableStateOf<DrinkPreset?>(DRINK_PRESETS[0]) }
 
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text("Log Water Intake", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text("Log Drink", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
 
-        // Quick add presets
+        // Named drink presets
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            listOf(250 to "+250 ml\n(Glass)", 500 to "+500 ml\n(Bottle)", 750 to "+750 ml\n(Large)", 1000 to "+1.0 L\n(Flask)").forEach { (ml, label) ->
+            DRINK_PRESETS.forEach { preset ->
                 OutlinedButton(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        amountMl = ml
+                        amountMl = preset.ml
+                        selectedPreset = preset
                     },
                     modifier = Modifier.weight(1f),
-                    colors = if (amountMl == ml) ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer) else ButtonDefaults.outlinedButtonColors(),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                    colors = if (selectedPreset == preset)
+                        ButtonDefaults.outlinedButtonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                    else ButtonDefaults.outlinedButtonColors(),
                 ) {
-                    Text(label, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(preset.emoji, style = MaterialTheme.typography.titleMedium)
+                        Text(preset.label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (preset.ml >= 1000) "${preset.ml / 1000} L" else "${preset.ml} ml",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }
+
 
         // Stepper for custom amount
         Row(
@@ -200,6 +222,7 @@ private fun LogWaterForm(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         amountMl = (amountMl - 50).coerceAtLeast(50)
+                        selectedPreset = null
                     },
                 ) {
                     Icon(Icons.Filled.Remove, contentDescription = "Decrease")
@@ -215,6 +238,7 @@ private fun LogWaterForm(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         amountMl = (amountMl + 50).coerceAtMost(3000)
+                        selectedPreset = null
                     },
                 ) {
                     Icon(Icons.Filled.Add, contentDescription = "Increase")
@@ -222,20 +246,23 @@ private fun LogWaterForm(
             }
         }
 
+        val drinkName = selectedPreset?.let { "${it.emoji} ${it.label}" } ?: "Water"
         Button(
             onClick = {
                 val liters = amountMl / 1000.0
+                val label = selectedPreset?.let { "${it.emoji} ${it.label}" }
+                    ?: "%,d ml water".format(amountMl)
                 scope.launch {
                     container.manualLogStore.logWater(liters)
                     container.healthConnectRepository.writeWater(liters)
-                    onSuccess("✓ Logged %,d ml (%.2f L) water".format(amountMl, liters))
+                    onSuccess("✓ Logged $label (%,d ml)".format(amountMl))
                 }
             },
             modifier = Modifier.fillMaxWidth().height(48.dp),
         ) {
             Icon(Icons.Filled.WaterDrop, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Log %,d ml Water".format(amountMl))
+            Text("Log $drinkName (%,d ml)".format(amountMl))
         }
     }
 }

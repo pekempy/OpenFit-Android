@@ -29,6 +29,7 @@ import com.openfit.mobile.data.settings.*
 import com.openfit.mobile.model.AiProviderConfig
 import com.openfit.mobile.model.AiProviderKind
 import com.openfit.mobile.work.WorkScheduler
+import androidx.compose.runtime.Composable
 import androidx.activity.result.IntentSenderRequest
 import com.openfit.mobile.data.backup.DriveAuth
 import kotlinx.coroutines.launch
@@ -37,45 +38,51 @@ enum class SettingsCategory(
     val title: String,
     val subtitle: String,
     val icon: ImageVector,
-    val iconColor: Color,
 ) {
     APPEARANCE(
         "Appearance",
         "Theme mode, high contrast, compact layout",
         Icons.Filled.Palette,
-        Color(0xFF8B5CF6)
     ),
     UNITS(
         "Units & Measurements",
         "Metric, Imperial, Stone & lbs, Height, Energy",
         Icons.Filled.Straighten,
-        Color(0xFF3B82F6)
     ),
     CONNECTIONS(
         "Connections & Sources",
         "Health Connect, Google Health OAuth, AI Coach",
         Icons.Filled.Link,
-        Color(0xFF10B981)
     ),
     GOALS(
         "Health Goals",
         "Daily targets for steps, active time, sleep, water",
         Icons.Filled.TrackChanges,
-        Color(0xFFF59E0B)
     ),
     REMINDERS(
         "Reminders & Briefings",
         "Morning sleep analysis, evening activity summary",
         Icons.Filled.Notifications,
-        Color(0xFFEC4899)
     ),
     ABOUT(
         "About OpenFit",
         "Version 1.0.0, architecture, privacy & licenses",
         Icons.Filled.Info,
-        Color(0xFF06B6D4)
     ),
 }
+
+/** Theme-adaptive icon color for each settings category. Uses M3 colour-scheme
+  * roles so it responds to Material You, dark/light mode, and accent presets. */
+val SettingsCategory.themeColor: Color
+    @Composable get() = when (this) {
+        SettingsCategory.APPEARANCE  -> MaterialTheme.colorScheme.primary
+        SettingsCategory.UNITS       -> MaterialTheme.colorScheme.secondary
+        SettingsCategory.CONNECTIONS -> MaterialTheme.colorScheme.tertiary
+        SettingsCategory.GOALS       -> MaterialTheme.colorScheme.primary
+        SettingsCategory.REMINDERS   -> MaterialTheme.colorScheme.secondary
+        SettingsCategory.ABOUT       -> MaterialTheme.colorScheme.tertiary
+    }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -254,14 +261,14 @@ fun SettingsScreen(
                             leadingContent = {
                                 Surface(
                                     shape = RoundedCornerShape(12.dp),
-                                    color = category.iconColor.copy(alpha = 0.15f),
+                                    color = category.themeColor.copy(alpha = 0.12f),
                                     modifier = Modifier.size(44.dp),
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Icon(
                                             category.icon,
                                             contentDescription = null,
-                                            tint = category.iconColor,
+                                            tint = category.themeColor,
                                             modifier = Modifier.size(24.dp),
                                         )
                                     }
