@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -224,7 +225,7 @@ fun OpenFitApp(
     CompositionLocalProvider(LocalMetricInspector provides inspectorState) {
         Box(Modifier.fillMaxSize()) {
             Scaffold(
-                contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+                contentWindowInsets = WindowInsets.systemBars,
                 bottomBar = {
                     if (showBottomBar) {
                         NavigationBar(
@@ -255,7 +256,7 @@ fun OpenFitApp(
                     startDestination   = startDestination,
                     modifier           = Modifier
                         .fillMaxSize()
-                        .padding(bottom = padding.calculateBottomPadding()),
+                        .padding(padding),
                     enterTransition    = { fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f) },
                     exitTransition     = { fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.96f) },
                     popEnterTransition = { fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f) },

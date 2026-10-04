@@ -601,7 +601,7 @@ class HealthConnectRepository(
             result.mapValues { it.value.toSet() }
         }
 
-        val pairedDevices = deviceSignals.entries.mapNotNull { (key, signals) ->
+        val rawPairedDevices = deviceSignals.entries.mapNotNull { (key, signals) ->
             val isPhantom = key.type == Device.TYPE_UNKNOWN &&
                 key.manufacturer.isBlank() && key.model.isBlank()
             // Drop phantom when a real entry for the same package exists.
@@ -658,6 +658,30 @@ class HealthConnectRepository(
                 signals = allSignals,
             )
         }.sortedByDescending { it.signals.size }
+
+        // ── Dedup same-device HC entries by canonical image key ──────────────
+        // The same physical wearable can produce two DeviceKeys when it writes
+        // records via multiple Health Connect app packages, or when some records
+        // include manufacturer/model and others don't. imageFor() maps both to
+        // the same canonical key; we merge signals and keep the best metadata.
+        val pairedDevices = run {
+            val grouped = rawPairedDevices
+                .groupBy { device ->
+                    WearableRegistry.imageFor(device.deviceType, device.deviceVersion)
+                        ?: device.deviceType?.trim()?.lowercase() ?: "unknown"
+                }
+            grouped.values.map { group ->
+                if (group.size == 1) group.first()
+                else group.reduce { acc, next ->
+                    acc.copy(
+                        signals            = (acc.signals + next.signals).distinct(),
+                        batteryLevelPercent = acc.batteryLevelPercent ?: next.batteryLevelPercent,
+                        lastSyncTimeIso    = listOfNotNull(acc.lastSyncTimeIso, next.lastSyncTimeIso)
+                            .maxOrNull(),
+                    )
+                }
+            }.sortedByDescending { it.signals.size }
+        }
 
         // ── Synthetic wearable rescue ─────────────────────────────────────────
         // If no real wearable row was produced (all watch records had device=null
