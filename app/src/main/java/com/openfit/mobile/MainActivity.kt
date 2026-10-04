@@ -15,6 +15,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -256,7 +257,8 @@ fun OpenFitApp(
                     startDestination   = startDestination,
                     modifier           = Modifier
                         .fillMaxSize()
-                        .padding(padding),
+                        .padding(padding)
+                        .consumeWindowInsets(padding),
                     enterTransition    = { fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f) },
                     exitTransition     = { fadeOut(tween(200)) + scaleOut(tween(200), targetScale = 0.96f) },
                     popEnterTransition = { fadeIn(tween(200)) + scaleIn(tween(200), initialScale = 0.96f) },

@@ -615,7 +615,7 @@ private fun LogWeightForm(
                 val kgToLog = effectiveKg ?: return@Button
                 scope.launch {
                     container.manualLogStore.logWeight(kgToLog, fat)
-                    container.healthConnectRepository.writeWeight(kgToLog)
+                    container.healthConnectRepository.writeWeight(kgToLog, fat)
                     val formatted = when (selectedUnit) {
                         WeightUnit.KG -> "%.1f kg".format(kgToLog)
                         WeightUnit.LBS -> "%.1f lbs".format(kgToLog * 2.20462262)

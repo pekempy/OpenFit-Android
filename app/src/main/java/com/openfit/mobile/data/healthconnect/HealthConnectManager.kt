@@ -90,6 +90,7 @@ object HealthConnectManager {
     val WRITE_PERMISSIONS: Set<String> = setOf(
         HealthPermission.getWritePermission(HydrationRecord::class),
         HealthPermission.getWritePermission(WeightRecord::class),
+        HealthPermission.getWritePermission(BodyFatRecord::class),
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
         HealthPermission.getWritePermission(ActiveCaloriesBurnedRecord::class),
         HealthPermission.getWritePermission(NutritionRecord::class),

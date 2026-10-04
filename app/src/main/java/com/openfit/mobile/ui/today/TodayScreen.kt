@@ -491,13 +491,14 @@ private fun TodayContent(container: AppContainer, padding: PaddingValues, state:
                                 fontWeight = FontWeight.SemiBold)
                         }
                         DesktopLineChart(
-                            values = trend.map { it.steps?.toDouble() },
-                            dates = trend.map { it.date },
-                            color = ChartColors.Movement,
-                            target = goals.stepGoal.toDouble(),
-                            targetLabel = "Goal",
-                            unit = "steps",
-                            height = 120.dp,
+                            values       = trend.map { it.steps?.toDouble() },
+                            dates        = trend.map { it.date },
+                            color        = ChartColors.Movement,
+                            target       = goals.stepGoal.toDouble(),
+                            targetLabel  = "Goal",
+                            unit         = "steps",
+                            height       = 120.dp,
+                            animationKey = bundle.fetchedAtEpochMillis,
                         )
                     }
                 }

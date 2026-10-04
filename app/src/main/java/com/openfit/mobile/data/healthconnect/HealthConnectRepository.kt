@@ -46,6 +46,7 @@ import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Length
 import androidx.health.connect.client.units.Mass
 import androidx.health.connect.client.units.Volume
+import androidx.health.connect.client.units.Percentage
 import com.openfit.mobile.data.health.HealthDataSource
 import com.openfit.mobile.data.logs.ManualHealthLogs
 import com.openfit.mobile.data.logs.ManualLogStore
@@ -938,16 +939,34 @@ class HealthConnectRepository(
         false
     }
 
-    suspend fun writeWeight(weightKg: Double, time: Instant = Instant.now()): Boolean = runCatching {
+    suspend fun writeWeight(
+        weightKg: Double,
+        bodyFatPercent: Double? = null,
+        time: Instant = Instant.now(),
+    ): Boolean = runCatching {
         val client = HealthConnectManager.client(context)
         val offset = zone.rules.getOffset(time)
-        val record = WeightRecord(
-            time = time,
-            zoneOffset = offset,
-            weight = Mass.kilograms(weightKg),
-            metadata = Metadata.manualEntry(),
-        )
-        client.insertRecords(listOf(record))
+        val records = buildList {
+            add(
+                WeightRecord(
+                    time = time,
+                    zoneOffset = offset,
+                    weight = Mass.kilograms(weightKg),
+                    metadata = Metadata.manualEntry(),
+                )
+            )
+            bodyFatPercent?.let { fat ->
+                add(
+                    BodyFatRecord(
+                        time = time,
+                        zoneOffset = offset,
+                        percentage = Percentage(fat),
+                        metadata = Metadata.manualEntry(),
+                    )
+                )
+            }
+        }
+        client.insertRecords(records)
         true
     }.getOrElse { e ->
         Log.e(TAG, "Failed to insert weight record: ${e.message}")
