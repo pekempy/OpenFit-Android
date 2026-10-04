@@ -56,10 +56,15 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
             is TodayUiState.Success -> {
                 val settings by container.settingsRepository.settingsFlow.collectAsState(initial = null)
                 val goals = settings?.goals ?: com.openfit.mobile.data.settings.UserHealthGoals()
-                val animKey = if (revealKey > 0L) maxOf(state.bundle.fetchedAtEpochMillis, revealKey) else 0L
+                val animKey = if (revealKey > 0L) maxOf(state.bundle.fetchedAtEpochMillis, revealKey) else state.bundle.fetchedAtEpochMillis
                 val sleep = state.bundle.today.sleep
                 val naps = state.bundle.today.naps
                 val totalSleepMinutes = state.bundle.today.totalSleepMinutes
+                val avgSleepMinutes = state.bundle.trend
+                    .mapNotNull { it.totalSleepMinutes }
+                    .takeIf { it.size > 1 }
+                    ?.average()
+                    ?.toInt()
                 Column(
                     modifier = Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -83,6 +88,13 @@ fun SleepScreen(container: AppContainer, state: TodayUiState, onRefresh: () -> U
                                     fontWeight = FontWeight.Bold,
                                     color = ChartColors.Sleep,
                                 )
+                                avgSleepMinutes?.let { avg ->
+                                    Text(
+                                        "14-day avg: ${formatDuration(avg)}",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                                 // Show sub-labels if both overnight and naps exist
                                 if (sleep != null && naps.isNotEmpty()) {
                                     Row(
