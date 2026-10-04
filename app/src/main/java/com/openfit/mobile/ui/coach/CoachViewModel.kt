@@ -90,7 +90,7 @@ class CoachViewModel(
             appendLine("$speaker: ${message.text}")
         }
         appendLine()
-        appendLine("Reply to $userName's last message, taking the whole conversation and health numbers into account. Plain text, no markdown headers.")
+        appendLine("Reply to $userName's last message. Use markdown where it helps — **bold** key numbers and comparisons, *italic* for light emphasis. Be specific to $userName's actual data; don't be generic.")
     }
 
     private fun buildSystemPrompt(

@@ -85,7 +85,13 @@ class SummaryService {
                 appendLine("- Automatically detected patterns: " + insights.joinToString("; ") { it.text })
             }
             appendLine()
-            appendLine("Write a short, warm good-morning summary (3-5 sentences) of how I slept, whether it looks better or worse than my recent average, and one practical suggestion for today if anything stands out. Plain text, no markdown headers, no bullet lists - just a friendly paragraph.")
+            appendLine("""
+Write a concise morning summary in 2–3 short paragraphs using markdown:
+- **Paragraph 1 – Duration:** State exactly how long I slept and compare directly to my 14-day average using precise numbers. Bold the key figures (e.g. "You got **6h 42m** last night, **18 minutes below** your recent average of **7h 0m**").
+- **Paragraph 2 – Quality:** Comment on sleep efficiency, stage breakdown (deep/REM ratios if available), and any overnight vitals (HRV, SpO₂, breathing rate). Note if something is notably good, low, or unusual — be specific, not vague. If everything looks normal, say so plainly.
+- **Paragraph 3 – Suggestion:** One concrete, specific action for today tied directly to what the data shows — not a generic sleep-hygiene tip. If HRV is low, suggest lighter activity; if sleep was short, suggest a nap window; etc.
+Bold key numbers and comparisons. Use *italics* for gentle emphasis. No bullet lists in the output — flowing paragraphs only.
+            """.trimIndent())
         }
     }
 
@@ -132,7 +138,13 @@ class SummaryService {
                 appendLine("- No logged exercise sessions today.")
             }
             appendLine()
-            appendLine("Write a short, encouraging end-of-day summary (3-5 sentences): how active I was today vs my recent average, and flag any heart rate or health reading that looks unusual compared to today's other numbers or my trend. If everything looks normal just focus on the activity. End with one specific, practical suggestion for tomorrow. Plain text, no markdown headers, no bullet lists — just a friendly paragraph.")
+            appendLine("""
+Write a concise end-of-day summary in 2–3 short paragraphs using markdown:
+- **Paragraph 1 – Activity:** State today's key movement numbers and compare explicitly to my 14-day averages. Bold the figures (e.g. "You walked **9,240 steps** today — **1,100 above** your 14-day average of **8,140**"). Mention calories, distance, or active minutes if they add insight.
+- **Paragraph 2 – Heart rate & recovery:** Comment on resting HR versus recent trend, HRV if available, and whether today looked physically demanding or easy for my body. Flag anything that's notably high, low, or inconsistent with the rest of the data.
+- **Paragraph 3 – Tomorrow:** One specific, actionable suggestion for tomorrow derived from today's actual numbers — not generic advice. If steps were low, suggest a target; if HR was elevated, suggest recovery; if everything was on-point, suggest building on it.
+Bold key numbers and comparisons. Use *italics* for gentle emphasis. No bullet lists in the output — flowing paragraphs only.
+            """.trimIndent())
         }
     }
 

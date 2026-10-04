@@ -56,6 +56,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -113,14 +118,13 @@ fun CoachScreen(container: AppContainer, healthState: TodayUiState) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding).imePadding()) {
             Text(
                 "Coach",
                 style = MaterialTheme.typography.headlineMedium,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             if (state.messages.isEmpty()) {
                 EmptyCoachState(
                     modifier = Modifier.weight(1f),
@@ -240,7 +244,7 @@ private fun ChatBubble(message: ChatMessage) {
             modifier = Modifier.widthIn(max = 280.dp),
         ) {
             Text(
-                text = message.text,
+                text = markdownToAnnotatedString(message.text),
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 style = MaterialTheme.typography.bodyLarge,
                 color = if (isUser) MaterialTheme.colorScheme.onPrimary
@@ -341,7 +345,6 @@ private fun MessageInput(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .imePadding()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -393,4 +396,36 @@ private fun MessageInput(
             }
         }
     }
+}
+
+/**
+ * Minimal inline-markdown → AnnotatedString for AI chat bubbles.
+ * Handles **bold**, *italic*, and `code` spans. No heading/block support.
+ */
+private fun markdownToAnnotatedString(input: String) = buildAnnotatedString {
+    // Regex: **bold** | *italic* | `code` — longest match wins left-to-right
+    val pattern = Regex("""\*\*(.+?)\*\*|\*([^*\n]+?)\*|`([^`]+?)`""")
+    var cursor = 0
+    for (match in pattern.findAll(input)) {
+        if (match.range.first > cursor) append(input.substring(cursor, match.range.first))
+        when {
+            match.value.startsWith("**") -> {
+                pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
+                append(match.groupValues[1])
+                pop()
+            }
+            match.value.startsWith("*") -> {
+                pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
+                append(match.groupValues[2])
+                pop()
+            }
+            match.value.startsWith("`") -> {
+                pushStyle(SpanStyle(fontFamily = FontFamily.Monospace))
+                append(match.groupValues[3])
+                pop()
+            }
+        }
+        cursor = match.range.last + 1
+    }
+    if (cursor < input.length) append(input.substring(cursor))
 }
